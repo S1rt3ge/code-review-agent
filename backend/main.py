@@ -21,7 +21,7 @@ from sqlalchemy import text
 
 from backend.config import settings
 from backend.models.schemas import HealthResponse
-from backend.routers import dashboard, github, reviews
+from backend.routers import auth, dashboard, github, reviews
 from backend.routers import settings as settings_router
 from backend.utils.database import async_session_factory, engine
 
@@ -77,6 +77,7 @@ app.add_middleware(
 )
 
 # Routers (all under /api prefix)
+app.include_router(auth.router, prefix="/api")
 app.include_router(github.router, prefix="/api")
 app.include_router(reviews.router, prefix="/api")
 app.include_router(settings_router.router, prefix="/api")

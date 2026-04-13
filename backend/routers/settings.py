@@ -16,11 +16,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings as app_settings
+from backend.models.db_models import User
 from backend.models.schemas import (
     SettingsResponse,
     SettingsTestResponse,
     SettingsUpdate,
 )
+from backend.utils.auth import get_current_user
+from backend.utils.crypto import decrypt_value, encrypt_value
 from backend.utils.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -35,29 +38,34 @@ VALID_LM_PREFERENCES = {"auto", "claude", "gpt", "local"}
 LLM_TEST_TIMEOUT = 10
 
 
+def _try_decrypt(ciphertext: str | None) -> str | None:
+    """Decrypt a ciphertext string, returning None on any failure."""
+    if not ciphertext:
+        return None
+    try:
+        return decrypt_value(ciphertext)
+    except Exception:
+        return None
+
+
 @router.get("", response_model=SettingsResponse)
 async def get_settings(
-    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> SettingsResponse:
     """Return the current user's LLM and agent settings.
 
-    In a full implementation this would load the authenticated user's
-    record from the database. For the Phase 1.1 scaffold the response
-    is built from application-level defaults.
-
     Args:
-        session: Async database session.
+        current_user: Authenticated user from JWT.
 
     Returns:
-        Current settings including which API keys are configured.
+        Current settings. API keys are not returned — only whether they are set.
     """
-    # TODO(phase-1.2): Load user from JWT, read encrypted keys from DB.
     return SettingsResponse(
-        plan="free",
-        api_key_claude_set=app_settings.anthropic_api_key is not None,
-        api_key_gpt_set=app_settings.openai_api_key is not None,
-        ollama_enabled=False,
-        ollama_host=app_settings.ollama_host,
+        plan=current_user.plan,
+        api_key_claude_set=current_user.api_key_claude is not None,
+        api_key_gpt_set=current_user.api_key_gpt is not None,
+        ollama_enabled=current_user.ollama_enabled,
+        ollama_host=current_user.ollama_host or app_settings.ollama_host,
         default_agents=["security", "performance", "style", "logic"],
         lm_preference="auto",
     )
@@ -66,15 +74,17 @@ async def get_settings(
 @router.put("", response_model=dict)
 async def update_settings(
     payload: SettingsUpdate,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, bool | list[str]]:
-    """Update user LLM settings.
+    """Update user LLM settings and API keys.
 
-    Validates the requested agents and LLM preference, then persists
-    the changes. API keys are encrypted before storage.
+    API keys are encrypted with Fernet before storage. Existing keys are
+    preserved when the field is omitted (None) in the request.
 
     Args:
         payload: Fields to update (only non-None values are applied).
+        current_user: Authenticated user from JWT.
         session: Async database session.
 
     Returns:
@@ -109,33 +119,62 @@ async def update_settings(
     if payload.ollama_enabled and payload.ollama_host:
         try:
             async with httpx.AsyncClient(timeout=LLM_TEST_TIMEOUT) as client:
-                resp = await client.get(payload.ollama_host)
+                resp = await client.get(f"{payload.ollama_host}/api/tags")
                 if resp.status_code != 200:
                     warnings.append(f"Ollama host returned status {resp.status_code}")
         except httpx.HTTPError:
             warnings.append("Ollama host is unreachable")
 
-    # TODO(phase-1.2): Persist settings to user record in DB.
-    logger.info("Settings update received (persistence not yet implemented)")
+    # Persist changes to the user record
+    if payload.api_key_claude is not None:
+        try:
+            current_user.api_key_claude = encrypt_value(payload.api_key_claude)
+        except ValueError:
+            warnings.append("FERNET_KEY not configured; API key was not stored encrypted")
+            current_user.api_key_claude = payload.api_key_claude
 
+    if payload.api_key_gpt is not None:
+        try:
+            current_user.api_key_gpt = encrypt_value(payload.api_key_gpt)
+        except ValueError:
+            warnings.append("FERNET_KEY not configured; API key was not stored encrypted")
+            current_user.api_key_gpt = payload.api_key_gpt
+
+    if payload.ollama_enabled is not None:
+        current_user.ollama_enabled = payload.ollama_enabled
+
+    if payload.ollama_host is not None:
+        current_user.ollama_host = payload.ollama_host
+
+    # Re-attach to session (current_user came from a dependency session that
+    # may be different from the route's session when both are injected).
+    merged = await session.merge(current_user)
+    await session.flush()
+
+    logger.info("Settings updated for user %s", merged.email)
     return {"updated": True, "warnings": warnings}
 
 
 @router.post("/test-llm", response_model=SettingsTestResponse)
 async def test_llm(
-    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> SettingsTestResponse:
-    """Test which LLM providers are currently reachable.
+    """Test which LLM providers are currently reachable for this user.
 
-    Performs lightweight connectivity checks against Claude, GPT, and
-    Ollama endpoints. Does not make actual inference calls.
+    Resolves API keys from the user's stored settings (decrypted), falling
+    back to application-level keys from environment variables.
 
     Args:
-        session: Async database session.
+        current_user: Authenticated user from JWT.
 
     Returns:
         Availability flags and detected model names for each provider.
     """
+    # Resolve effective API keys (user key overrides app-level key)
+    claude_key = _try_decrypt(current_user.api_key_claude) or app_settings.anthropic_api_key
+    gpt_key = _try_decrypt(current_user.api_key_gpt) or app_settings.openai_api_key
+    ollama_host = current_user.ollama_host or app_settings.ollama_host
+
     claude_ok = False
     gpt_ok = False
     ollama_ok = False
@@ -144,12 +183,12 @@ async def test_llm(
 
     async with httpx.AsyncClient(timeout=LLM_TEST_TIMEOUT) as client:
         # Test Claude
-        if app_settings.anthropic_api_key:
+        if claude_key:
             try:
                 resp = await client.get(
                     "https://api.anthropic.com/v1/models",
                     headers={
-                        "x-api-key": app_settings.anthropic_api_key,
+                        "x-api-key": claude_key,
                         "anthropic-version": "2023-06-01",
                     },
                 )
@@ -157,34 +196,34 @@ async def test_llm(
                 if claude_ok:
                     models["claude"] = "claude-opus-4-6"
             except httpx.HTTPError as e:
-                logger.warning(f"Claude connectivity check failed: {e}")
+                logger.warning("Claude connectivity check failed: %s", e)
 
         # Test GPT
-        if app_settings.openai_api_key:
+        if gpt_key:
             try:
                 resp = await client.get(
                     "https://api.openai.com/v1/models",
-                    headers={"Authorization": f"Bearer {app_settings.openai_api_key}"},
+                    headers={"Authorization": f"Bearer {gpt_key}"},
                 )
                 gpt_ok = resp.status_code == 200
                 if gpt_ok:
                     models["gpt"] = "gpt-4o"
             except httpx.HTTPError as e:
-                logger.warning(f"GPT connectivity check failed: {e}")
+                logger.warning("GPT connectivity check failed: %s", e)
 
-        # Test Ollama
-        try:
-            resp = await client.get(f"{app_settings.ollama_host}/api/tags")
-            ollama_ok = resp.status_code == 200
-            if ollama_ok:
-                data = resp.json()
-                ollama_models = data.get("models", [])
-                if ollama_models:
-                    models["ollama"] = ollama_models[0].get("name", "unknown")
-                else:
-                    models["ollama"] = "no models loaded"
-        except httpx.HTTPError as e:
-            logger.debug(f"Ollama connectivity check failed: {e}")
+        # Test Ollama (only if enabled)
+        if current_user.ollama_enabled or app_settings.ollama_host:
+            try:
+                resp = await client.get(f"{ollama_host}/api/tags")
+                ollama_ok = resp.status_code == 200
+                if ollama_ok:
+                    data = resp.json()
+                    ollama_models = data.get("models", [])
+                    models["ollama"] = (
+                        ollama_models[0].get("name", "unknown") if ollama_models else "no models loaded"
+                    )
+            except httpx.HTTPError as e:
+                logger.debug("Ollama connectivity check failed: %s", e)
 
     # Determine selected provider
     if claude_ok:

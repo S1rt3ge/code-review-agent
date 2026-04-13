@@ -29,6 +29,36 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 # ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+
+
+class RegisterRequest(BaseModel):
+    """Request body for user registration."""
+
+    email: str
+    username: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    """Request body for email/password login."""
+
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    """Response returned after successful authentication."""
+
+    access_token: str
+    token_type: str = "bearer"
+    user_id: str
+    email: str
+    username: str
+
+
+# ---------------------------------------------------------------------------
 # User
 # ---------------------------------------------------------------------------
 

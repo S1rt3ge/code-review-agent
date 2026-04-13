@@ -43,6 +43,7 @@ class User(Base):
     )
     email: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     username: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    hashed_password: Mapped[str | None] = mapped_column(Text, nullable=True)
     plan: Mapped[str] = mapped_column(Text, nullable=False, default="free")
     api_key_claude: Mapped[str | None] = mapped_column(Text, nullable=True)
     api_key_gpt: Mapped[str | None] = mapped_column(Text, nullable=True)
