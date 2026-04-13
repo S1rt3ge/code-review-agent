@@ -19,12 +19,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 
-from backend.models.db_models import AgentExecution, Finding, Repository, Review
+from backend.agents.orchestrator import run_graph
+from backend.models.db_models import AgentExecution, Finding, Repository, Review, User
 from backend.services.code_extractor import CodeChunk, extract_chunks
 from backend.services.github_api import GitHubApiClient, get_github_client
+from backend.utils.crypto import decrypt_value
 from backend.utils.database import async_session_factory
 
 logger = logging.getLogger(__name__)
+
+
+def _try_decrypt_key(ciphertext: str | None) -> str | None:
+    """Decrypt a stored API key, returning None on any failure."""
+    if not ciphertext:
+        return None
+    try:
+        return decrypt_value(ciphertext)
+    except Exception:
+        return None
+
 
 # Severity display order for PR comments (most important first).
 SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"]
@@ -134,12 +147,30 @@ async def _run_analysis_inner(session: AsyncSession, review_id: uuid.UUID) -> No
     chunks = extract_chunks(pr_files)
     logger.info("Extracted %d chunks for review %s", len(chunks), review_id)
 
-    # ── 4. Run orchestrator (stub returns empty list until agents are built) ──
+    # ── 4. Run orchestrator ────────────────────────────────────────────────────
     agents = review.selected_agents or ["security", "performance", "style", "logic"]
-    all_findings, agent_results = await _run_orchestrator(
+
+    # Resolve user API keys for LLM selection.
+    user = await session.get(User, review.user_id)
+    api_key_claude: str | None = None
+    api_key_gpt: str | None = None
+    ollama_enabled = False
+    ollama_host: str | None = None
+
+    if user:
+        api_key_claude = _try_decrypt_key(user.api_key_claude)
+        api_key_gpt = _try_decrypt_key(user.api_key_gpt)
+        ollama_enabled = user.ollama_enabled
+        ollama_host = user.ollama_host
+
+    all_findings, agent_results = await run_graph(
         review_id=review_id,
         chunks=chunks,
         agents=agents,
+        api_key_claude=api_key_claude,
+        api_key_gpt=api_key_gpt,
+        ollama_enabled=ollama_enabled,
+        ollama_host=ollama_host,
     )
 
     # ── 5. Persist findings and agent execution records ────────────────────────
@@ -207,57 +238,6 @@ async def _run_analysis_inner(session: AsyncSession, review_id: uuid.UUID) -> No
             findings=all_findings,
         )
 
-
-# ---------------------------------------------------------------------------
-# Orchestrator stub (replaced by real LangGraph in Phase 2)
-# ---------------------------------------------------------------------------
-
-
-async def _run_orchestrator(
-    review_id: uuid.UUID,
-    chunks: list[CodeChunk],
-    agents: list[str],
-) -> tuple[list[dict], dict[str, dict]]:
-    """Dispatch code chunks to analysis agents and collect results.
-
-    Currently a stub that returns empty findings so the rest of the pipeline
-    is testable before the LangGraph agents are implemented.
-
-    Args:
-        review_id: Review UUID (for logging).
-        chunks: Code chunks extracted from the PR diff.
-        agents: Agent names to run (e.g. ``["security", "style"]``).
-
-    Returns:
-        Tuple of (flat findings list, per-agent execution metadata dict).
-    """
-    now = datetime.now(timezone.utc)
-    agent_results: dict[str, dict] = {}
-
-    for agent_name in agents:
-        agent_results[agent_name] = {
-            "status": "done",
-            "started_at": now,
-            "completed_at": now,
-            "tokens_input": 0,
-            "tokens_output": 0,
-            "findings_count": 0,
-            "error_message": None,
-        }
-
-    # TODO(phase-2): Replace with real LangGraph orchestrator invocation.
-    # Example:
-    #   from backend.agents.orchestrator import run_graph
-    #   results = await run_graph(review_id=review_id, chunks=chunks, agents=agents)
-    #   return results["findings"], results["agent_executions"]
-
-    logger.debug(
-        "Orchestrator stub: %d chunks, %d agents → 0 findings (review %s)",
-        len(chunks),
-        len(agents),
-        review_id,
-    )
-    return [], agent_results
 
 
 # ---------------------------------------------------------------------------
