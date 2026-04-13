@@ -1,353 +1,251 @@
-# 🚀 Ready to Run in Claude Code
+# Ready to Run in Claude Code
 
-Все документы готовы. Ниже инструкции как запустить разработку.
-
----
-
-## 📦 Что ты получил
-
-### Основные документы (в outputs/):
-1. **PROJECT_IDEA.md** (450 строк) — что строим и почему
-2. **TECHNICAL_SPEC.md** (800 строк) — как строим (API, DB, agents)
-3. **CLAUDE.md** (120 строк) — конфиг для Claude Code
-4. **DEVELOPMENT_PLAN.md** (400 строк) — 30-день timeline
-5. **SPEC_FIRST_EVALUATION.md** (300 строк) — оценка методологии
-
-### Агенты (.claude/agents/):
-1. **backend-engineer.md** (300 строк) — FastAPI, LangGraph, PostgreSQL
-2. **frontend-developer.md** (250 строк) — React 19, TypeScript, TailwindCSS
-3. **qa-reviewer.md** (200 строк) — tests, code review, evaluation
-
-### Правила (.claude/rules/):
-1. **backend-rules.md** (250 строк) — async, types, errors, testing
-2. **frontend-rules.md** (300 строк) — React, TypeScript, Tailwind, testing
-
-### Навыки (.claude/skills/):
-1. **implement-agent.md** (400 строк) — как добавлять новые agents
+Complete instructions to launch the Code Review Agent development in Claude Code.
 
 ---
 
-## 🎯 Как запустить разработку
+## 📦 What You Have
 
-### Option 1: Быстрый запуск (рекомендуется)
+✅ Complete Spec-First documentation (4,070+ lines)
+✅ 3 AI agents (backend, frontend, QA)
+✅ 30-day development timeline
+✅ Production-ready specifications
+✅ Code standards and rules
+✅ Ready for Claude Code execution
 
-**Step 1:** Открой Claude Code (terminal или web)
+---
 
-**Step 2:** Создай новую session
+## 🚀 3-Step Quick Start
 
-**Step 3:** Загрузи все документы в knowledge:
+### Step 1: Extract Archive
 ```bash
-# Copy all files to working directory
-cp /mnt/user-data/outputs/* .
-cp -r /mnt/user-data/outputs/.claude .
+tar -xzf code-review-agent-FINAL.tar.gz
+cd code-review-agent
 ```
 
-**Step 4:** Начальный промпт для Claude Code:
+### Step 2: Verify Structure
+```bash
+ls -la
+# Should see: .claude/, *.md files
+```
+
+### Step 3: Open Claude Code
+- Create new session
+- Load all files into knowledge
+- Paste initial prompt (below)
+
+---
+
+## 💻 Initial Prompt for Claude Code
+
+Copy and paste this EXACT prompt into Claude Code:
 
 ```
 You are orchestrating a 3-agent team to build an AI-powered code review system.
 
-CRITICAL: Load these files into your knowledge FIRST:
-1. PROJECT_IDEA.md (understand what to build)
-2. TECHNICAL_SPEC.md (understand how to build)
-3. CLAUDE.md (understand architecture + your roles)
+CRITICAL: Load these core documents into knowledge FIRST:
+1. PROJECT_IDEA.md (understand what you're building)
+2. TECHNICAL_SPEC.md (understand technical architecture)
+3. CLAUDE.md (understand your configuration)
 
-Agent Configuration:
-- .claude/agents/backend-engineer.md — Your backend specialist
-- .claude/agents/frontend-developer.md — Your frontend specialist
-- .claude/agents/qa-reviewer.md — Your QA specialist
+Then load agent configurations:
+- .claude/agents/backend-engineer.md (your backend specialist)
+- .claude/agents/frontend-developer.md (your frontend specialist)
+- .claude/agents/qa-reviewer.md (your QA specialist)
 
-Rules (apply to code):
-- .claude/rules/backend-rules.md (glob: backend/**/*.py)
-- .claude/rules/frontend-rules.md (glob: frontend/src/**/*.tsx)
+Then load rules:
+- .claude/rules/backend-rules.md (Python code standards)
+- .claude/rules/frontend-rules.md (JavaScript code standards)
 
-Skills (for reference):
-- .claude/skills/implement-agent.md (how to add new agents)
+Then load skills:
+- .claude/skills/implement-agent.md (how to extend system)
 
-Execution Plan:
-1. Read all documents above
-2. Understand the system architecture
-3. Create project structure (directories, files)
-4. Start DEVELOPMENT_PLAN Phase 1, Task 1.1: Project Setup & Database
-5. Work in parallel: backend-engineer + frontend-developer
-6. Report status daily
+Reference documents:
+- INDEX.md (where to find everything)
+- DEVELOPMENT_PLAN.md (timeline and tasks)
 
-KEY INSTRUCTIONS:
-- backend-engineer: Use Opus model (complex logic)
-- frontend-developer: Use Sonnet model (UI work, cheaper)
-- qa-reviewer: Use Sonnet, Read-only (no Write/Edit), write test specs
-- Work async/parallel where possible
+EXECUTION PLAN:
+1. Read all loaded documents carefully
+2. Understand: This is building an AI code review system with GitHub integration
+3. Check DEVELOPMENT_PLAN.md for Phase 1, Task 1.1: "Project Setup & Database"
+4. Begin Phase 1, Task 1.1 immediately
+
+KEY INSTRUCTIONS FOR AGENTS:
+- backend-engineer (Opus model): FastAPI, LangGraph, PostgreSQL, async-first
+- frontend-developer (Sonnet model): React 19, JavaScript (JSDoc types), TailwindCSS - NO TypeScript
+- qa-reviewer (Sonnet model): Testing & evaluation (Read-only, no code changes)
+
+EXECUTION RULES:
+- Work in PARALLEL (backend + frontend simultaneously)
 - Commit code after each task
-- Each task has deliverables - verify them before marking done
+- Each task has DELIVERABLES - verify before marking done
+- Ask for clarification if anything is ambiguous
+- Follow code rules strictly (.claude/rules/)
+- Report blockers immediately
 
-Begin with Phase 1, Task 1.1.
-```
+SYSTEM OVERVIEW:
+- GitHub webhook → PR event triggers analysis
+- Multi-agent parallel execution (4 agents: Security, Performance, Style, Logic)
+- Results: GitHub PR comments + React dashboard
+- Stack: FastAPI, LangGraph, React, PostgreSQL
+- LLM: Claude Opus 4.6 (primary), GPT-5.4 (fallback), Qwen2.5-Coder-32B (local)
 
-**Step 5:** Let agents work!
-
----
-
-### Option 2: Local Setup (if you want to work on it locally first)
-
-```bash
-# Clone/create repo
-mkdir code-review-agent && cd code-review-agent
-git init
-
-# Create structure
-mkdir backend frontend supabase .claude/{agents,rules,skills}
-
-# Copy all spec files
-cp /mnt/user-data/outputs/*.md .
-cp -r /mnt/user-data/outputs/.claude .
-
-# Start backend manually
-python -m venv venv
-source venv/bin/activate
-pip install fastapi sqlalchemy anthropic langgraph openai
-
-# Or in Claude Code: paste the complete flow above
+BEGIN Phase 1, Task 1.1: "Project Setup & Database" NOW.
 ```
 
 ---
 
-## 📋 Timeline
+## ⏱️ Timeline
 
 **Phase 1 (Week 1):** Backend foundation
-- Project setup
-- GitHub integration
-- LLM router
-- First agent (Security)
-- **Expected:** Webhook receiving + security analysis working
+- GitHub integration + LLM router + first agent
+- **Deliverable:** Webhook receives PR events
 
 **Phase 2 (Week 2):** Multi-agent orchestration
-- Remaining agents (Perf, Style, Logic)
-- Parallel execution (LangGraph)
-- Result aggregation
-- PR comments
-- **Expected:** Full agent pipeline working
+- Remaining agents + parallel execution + aggregation
+- **Deliverable:** All agents working, findings generated
 
-**Phase 3 (Week 3):** Frontend + Dashboard
-- Dashboard page
-- ReviewDetail page
-- Settings page
-- API integration
-- **Expected:** Complete UI, fully functional
+**Phase 3 (Week 3):** Frontend dashboard
+- React dashboard + settings + API integration
+- **Deliverable:** Dashboard displays reviews
 
-**Phase 4 (Week 4):** Testing + Evaluation
-- Unit tests (>80% coverage)
-- Integration tests
-- Evaluation metrics
-- **Expected:** All tests passing, metrics documented
+**Phase 4 (Week 4):** Testing & evaluation
+- Unit tests + integration tests + metrics
+- **Deliverable:** Tests passing, metrics documented
 
-**Phase 5 (Week 4-5):** Documentation + Deploy
-- Complete documentation
-- Docker setup
-- Deploy to Railway/Render
-- **Expected:** Production-ready system
+**Phase 5 (Week 5):** Documentation & deployment
+- Complete documentation + Docker + deploy
+- **Deliverable:** System in production
 
-**Total:** 30 days, 3 agents, multi-phase development
+**Total: 30 days**
 
 ---
 
-## ✅ Success Criteria (MVP Done When)
+## ✅ Success Criteria
 
-- [ ] GitHub webhook working (PR → analysis triggered)
-- [ ] 4 agents running in parallel
-- [ ] Findings posted to PR as comment
-- [ ] Dashboard shows reviews + history
-- [ ] LLM selection (Claude/GPT/Local via settings)
-- [ ] All tests passing (unit + integration)
-- [ ] Deployed to production
-- [ ] Documentation complete
+MVP is complete when:
+- ✅ GitHub webhook working (PR → analysis triggered)
+- ✅ 4 agents running in parallel
+- ✅ Findings posted to PR comment
+- ✅ Dashboard functional
+- ✅ LLM selection working (Claude/GPT/Local via settings)
+- ✅ Tests passing (>80% coverage)
+- ✅ Deployed to production
 
-**Metrics targets:**
+**Target Metrics:**
 - Finding accuracy: ≥80%
 - Review latency: <5 minutes
 - Cost: <$0.30 per review
 
 ---
 
-## 🔧 Configuration
+## 🛠️ Tech Stack
 
-### Environment Variables (needed for Claude Code)
+**Backend:**
+- Python 3.12, FastAPI, LangGraph
+- PostgreSQL, Anthropic SDK, OpenAI SDK
 
-Create `.env`:
-```bash
-# GitHub
-GITHUB_APP_ID=your_app_id
-GITHUB_APP_PRIVATE_KEY=your_key
-GITHUB_CLIENT_ID=your_client_id
-GITHUB_CLIENT_SECRET=your_secret
-GITHUB_WEBHOOK_SECRET=your_webhook_secret
+**Frontend:**
+- React 19, JavaScript (JSDoc types - NO TypeScript)
+- TailwindCSS (styling only), Zustand (state)
 
-# Database
-DATABASE_URL=postgresql://user:pass@localhost/code_review_db
-
-# LLM APIs
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-OLLAMA_HOST=http://localhost:11434
-
-# JWT
-JWT_SECRET=random_secret_key
-
-# Stripe (optional, for v2.0)
-STRIPE_API_KEY=sk_live_...
-```
-
-### Database Setup
-
-```bash
-# Start PostgreSQL
-docker-compose up postgres
-
-# Create database
-psql postgresql://localhost/code_review_db -c "CREATE DATABASE code_review_db"
-
-# Run migrations (backend-engineer will create these)
-psql -f supabase/migrations/001_initial_schema.sql
-```
+**LLMs:**
+- Claude Opus 4.6 (primary, complex logic)
+- GPT-5.4 (fallback, cheaper)
+- Qwen2.5-Coder-32B (local, via Ollama)
 
 ---
 
-## 📖 Document Map
+## 📋 Files Included (16 total)
 
-**For understanding the project:**
-1. Start with **PROJECT_IDEA.md** (big picture)
-2. Deep dive with **TECHNICAL_SPEC.md** (implementation details)
+**Specifications (6):**
+- PROJECT_IDEA.md, TECHNICAL_SPEC.md, CLAUDE.md
+- DEVELOPMENT_PLAN.md, INDEX.md, READY_TO_RUN.md
 
-**For running agents:**
-1. **CLAUDE.md** — architecture + your roles
-2. **.claude/agents/[your-agent].md** — your specific instructions
-3. **.claude/rules/[relevant-rules].md** — code standards to follow
+**Agents (3):**
+- .claude/agents/backend-engineer.md
+- .claude/agents/frontend-developer.md
+- .claude/agents/qa-reviewer.md
 
-**For adding features:**
-1. **DEVELOPMENT_PLAN.md** — timeline + next steps
-2. **.claude/skills/implement-agent.md** — how to extend system
+**Rules (2):**
+- .claude/rules/backend-rules.md
+- .claude/rules/frontend-rules.md
 
-**For evaluation:**
-1. **SPEC_FIRST_EVALUATION.md** — methodology review + success metrics
+**Skills (1):**
+- .claude/skills/implement-agent.md
 
----
-
-## 🎓 How Agents Work Together
-
-```
-GitHub Webhook
-      ↓
-backend-engineer receives PR
-      ↓
-Extracts code + creates review record
-      ↓
-Calls orchestrator with selected agents
-      ↓
-Parallel execution:
-  • security-agent → finds vulnerabilities
-  • performance-agent → finds bottlenecks
-  • style-agent → finds style issues
-  • logic-agent → finds bugs
-      ↓
-result-aggregator dedupes + ranks findings
-      ↓
-backend-engineer posts comment to PR
-      ↓
-frontend-developer displays in dashboard
-      ↓
-qa-reviewer checks quality + accuracy
-```
+**Guides (4):**
+- 00_READ_FIRST.txt, MANIFEST.txt, DOWNLOAD_THIS.txt, (this file)
 
 ---
 
-## 🚨 Important Notes
+## 🔍 Before You Start
 
-### For backend-engineer:
-- Use async/await everywhere (FastAPI + LangGraph require it)
-- Type hints on all functions (TypeScript for frontend)
-- RLS at database level (security)
-- All LLM calls through llm_router (flexibility)
-- Test each module (Unit tests)
+**Verify:**
+- ✅ All files extracted
+- ✅ .claude/ directory exists with agents/, rules/, skills/
+- ✅ All .md files present
+- ✅ Git initialized (optional but recommended)
 
-### For frontend-developer:
-- TailwindCSS ONLY (no CSS files)
-- React hooks (no class components)
-- TypeScript strict mode
-- All API calls through useApi hook
-- Component tests for each component
-
-### For qa-reviewer:
-- NO Write/Edit tools (only Read, Bash, Grep)
-- Check coverage >80%
-- Run integration tests
-- Measure evaluation metrics
-- Report findings, don't fix code
+**Prepare:**
+- Have Claude Code ready
+- Have GitHub account (for testing webhooks)
+- Have API keys ready (Anthropic, OpenAI - optional for MVP)
 
 ---
 
-## 📞 Getting Help
+## 📞 Troubleshooting
 
-If agents get stuck:
+**"Files not loading in Claude Code?"**
+- Verify all files are in same directory
+- Try loading one file at a time first
+- Check file paths have no spaces
 
-1. **Check TECHNICAL_SPEC.md** for API specs
-2. **Check DEVELOPMENT_PLAN.md** for current task definition
-3. **Check relevant .claude/rules/** for code standards
-4. **Ask for clarification** in prompt (don't assume)
-5. **Document blockers** for human review
+**"Where do I start?"**
+- Read 00_READ_FIRST.txt
+- Follow 3-step quick start above
+- Paste initial prompt into Claude Code
 
----
+**"What's the initial prompt?"**
+- Copy-paste the "Initial Prompt for Claude Code" section above
 
-## 🎯 First 24 Hours
-
-**What should be done:**
-- [ ] Project structure created
-- [ ] PostgreSQL running
-- [ ] requirements.txt + package.json installed
-- [ ] First API endpoint working (POST /reviews)
-- [ ] GitHub webhook signature verification working
-- [ ] Able to receive PR events from GitHub
-
-**What you should see:**
-```
-✓ Backend running: uvicorn backend.main:app --reload
-✓ Frontend running: npm run dev
-✓ Database ready: 5 tables created (users, reviews, findings, etc.)
-✓ GitHub webhook: able to receive test events
-✓ Basic API: curl http://localhost:8000/api/reviews → 401 (no auth, expected)
-```
+**"Where's the documentation?"**
+- Check INDEX.md for complete navigation
+- All documents are included in the package
 
 ---
 
-## 📊 Metrics Dashboard (Phase 4)
+## 🎯 Next Steps
 
-When evaluation starts, track:
-
-```
-✓ Finding Accuracy: % findings humans agree with (target: ≥80%)
-✓ Finding Recall: % actual issues caught (target: ≥75%)
-✓ False Positives: % non-issues flagged (target: <15%)
-✓ Review Latency: P95 time webhook→comment (target: <5 min)
-✓ Cost Per Review: tokens used → $ (target: <$0.30)
-✓ Test Coverage: % code covered by tests (target: ≥80%)
-```
+1. ✅ Extract code-review-agent-FINAL.tar.gz
+2. ✅ Verify all files present
+3. ✅ Open Claude Code
+4. ✅ Load all files into knowledge
+5. ✅ Paste initial prompt (from above)
+6. ✅ Watch agents build the system
 
 ---
 
-## 🎉 Ready?
+## 📊 Expected Timeline
 
-**All documentation is prepared.**
-
-You have:
-- ✅ 5 core documents (2000+ lines)
-- ✅ 3 agent prompts (750 lines)
-- ✅ 2 rule sets (550 lines)
-- ✅ 1 skill guide (400 lines)
-- ✅ 30-day timeline
-- ✅ Success criteria
-
-**Next step:** Open Claude Code and paste the "Быстрый запуск" prompt above.
-
-**Expected outcome:** Full-stack code review agent in 4-5 weeks.
+- **Day 1-3:** Backend setup, GitHub integration working
+- **Day 4-7:** Multi-agent system functional
+- **Day 8-14:** Frontend dashboard live
+- **Day 15-21:** Tests passing, evaluation metrics ready
+- **Day 22-30:** Documentation complete, deployed to production
 
 ---
 
-**Good luck! 🚀**
+## ✨ You're Ready!
+
+All documentation is complete, organized, and ready for execution.
+
+**Now:**
+1. Extract the archive
+2. Open Claude Code
+3. Paste the initial prompt
+4. Let the agents build your system
+
+**Expected outcome:** Full-stack AI code review agent in 30 days.
+
+Good luck! 🚀
