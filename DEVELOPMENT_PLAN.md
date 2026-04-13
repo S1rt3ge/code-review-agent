@@ -4,6 +4,27 @@
 
 ---
 
+## Current Status
+
+**Last updated:** 2026-04-14
+
+| Phase | Status | Tests |
+|-------|--------|-------|
+| 1.1 Project Setup & DB | ✅ Done | — |
+| 1.2 GitHub Integration | ✅ Done | — |
+| 1.3 JWT Auth & Settings | ✅ Done | — |
+| 1.4 Security Agent + Orchestrator | ✅ Done | 72 passing |
+| **2.1 Remaining Agents** | **⬅ NEXT** | — |
+| 2.2 Parallel Execution | — | — |
+| 2.3 Result Aggregation | — | — |
+| 2.4 PR Comment Generation | — | — |
+| 3.x Frontend | — | — |
+
+**Run tests:** `docker compose --profile test run --rm tests`
+**Run backend:** `docker compose up backend`
+
+---
+
 ## Phase 0: Preparation (Already Done ✅)
 
 ✅ PROJECT_IDEA.md — полное описание проблемы, архитектуры, MVP
@@ -14,82 +35,63 @@
 
 ---
 
-## Phase 1: Backend Foundation (Week 1-2)
+## Phase 1: Backend Foundation ✅ DONE
 
-### Task 1.1: Project Setup & Database
-**Time:** 1.5 дня
-**Owner:** backend-engineer agent
+### Task 1.1: Project Setup & Database ✅
+**Completed:** Session 1
 
-- [ ] `mkdir code-review-agent && git init`
-- [ ] `requirements.txt` (fastapi, sqlalchemy, anthropic, openai, langgraph)
-- [ ] `.env.example` (all env vars)
-- [ ] Docker setup (docker-compose.yml with postgres)
-- [ ] `backend/config.py` — load env, create settings
-- [ ] `backend/main.py` — FastAPI app skeleton
-- [ ] Database migration 001: create users, repositories, reviews, findings, agent_executions tables
-- [ ] Database migration 002: add RLS policies
-- [ ] Test: `docker-compose up` → database ready
+- [x] `mkdir code-review-agent && git init`
+- [x] `requirements.txt` (fastapi, sqlalchemy, anthropic, openai, langgraph)
+- [x] `.env.example` (all env vars)
+- [x] Docker setup (docker-compose.yml with postgres + tests profile)
+- [x] `backend/config.py` — pydantic-settings, env_ignore_empty, CORS validator
+- [x] `backend/main.py` — FastAPI app, lifespan, health check, WebSocket placeholder
+- [x] Migrations 001–003: users, repositories, reviews, findings, agent_executions, audit_log
+- [x] `backend/utils/crypto.py` — Fernet encrypt/decrypt
+- [x] `backend/utils/webhooks.py` — HMAC-SHA256 signature verification
+- [x] 20 tests passing (crypto + webhooks)
 
-**Deliverable:** GitHub webhook-ready backend with empty database
-
----
-
-### Task 1.2: GitHub Integration
-**Time:** 2 дня
-**Owner:** backend-engineer agent
-
-- [ ] `backend/routers/github.py` — webhook receiver
-- [ ] `backend/utils/webhooks.py` — signature verification (HMAC-SHA256)
-- [ ] `backend/services/github_api.py` — GitHub API wrapper (fetch code, post comments)
-- [ ] Endpoint: `POST /github/webhook` (receives PR events)
-  - [ ] Verify signature
-  - [ ] Extract PR metadata
-  - [ ] Create review record (status='pending')
-  - [ ] Queue async analysis
-  - [ ] Return 202 Accepted
-- [ ] Endpoint: `POST /reviews/{id}/analyze` (start analysis)
-- [ ] Endpoint: `POST /reviews/{id}/post-comment` (post findings to PR)
-- [ ] Test with ngrok (local webhook testing)
-
-**Deliverable:** GitHub webhook receiving + code extraction working
+**Deliverable:** ✅ Docker-first dev setup, DB, health check at GET /health
 
 ---
 
-### Task 1.3: LLM Router & Settings
-**Time:** 1.5 дня
-**Owner:** backend-engineer agent
+### Task 1.2: GitHub Integration ✅
+**Completed:** Session 2
 
-- [ ] `backend/agents/llm_router.py` — select Claude/GPT/Local based on user settings
-- [ ] `backend/routers/settings.py` — settings endpoints
-- [ ] Endpoint: `GET /settings` — get user LLM config
-- [ ] Endpoint: `PUT /settings` — update API keys (encrypt them)
-  - [ ] Validate Claude key (test call)
-  - [ ] Validate GPT key (test call)
-  - [ ] Test Ollama connectivity
-  - [ ] Store encrypted
-- [ ] Endpoint: `POST /settings/test-llm` — test which LLM is available
-- [ ] `backend/utils/crypto.py` — encrypt/decrypt API keys (Fernet)
-- [ ] Authentication: JWT (create_access_token, verify_token)
+- [x] `backend/services/github_api.py` — GitHub App JWT auth, installation token cache, paginated PR files, post/update comments
+- [x] `backend/services/code_extractor.py` — unified diff → CodeChunk objects, language detection
+- [x] `backend/services/analyzer.py` — background task: fetch→extract→orchestrate→persist→post comment
+- [x] `backend/routers/github.py` — webhook auto-triggers `run_analysis` after creating review
+- [x] `backend/routers/reviews.py` — analyze_review fires asyncio.create_task; post_comment fully wired
+- [x] 50 tests passing (+21 new)
 
-**Deliverable:** LLM router + settings management working
+**Deliverable:** ✅ Webhook → analysis pipeline wired end-to-end
 
 ---
 
-### Task 1.4: Basic Agent (Security)
-**Time:** 2 дня
-**Owner:** backend-engineer agent
+### Task 1.3: LLM Router & Settings ✅
+**Completed:** Session 2
 
-- [ ] `backend/agents/security_agent.py` — first agent implementation
-  - [ ] Prompt: security analysis (injection, auth, crypto)
-  - [ ] Input schema: code, language, context
-  - [ ] Output schema: findings list
-- [ ] `backend/agents/orchestrator.py` — LangGraph setup (basic single-agent flow)
-  - [ ] Node: extract_code → security_agent → return results
-  - [ ] Error handling (agent timeout, LLM error)
-  - [ ] Token counting (for cost tracking)
-- [ ] Test: `curl -X POST /reviews/xyz/analyze`
+- [x] `backend/agents/llm_router.py` — Claude/GPT/Ollama selection, auto-mode, quality scores
+- [x] `backend/utils/auth.py` — PBKDF2-SHA256 passwords, JWT create/verify, get_current_user dependency
+- [x] `backend/routers/auth.py` — POST /auth/register, /auth/token, /auth/login, GET /auth/me
+- [x] `backend/routers/settings.py` — real DB persistence, Fernet-encrypted API keys, test-llm endpoint
+- [x] Migration 004: hashed_password column
+- [x] 61 tests passing (+11 new)
 
-**Deliverable:** Single agent working, results stored in DB
+**Deliverable:** ✅ Full JWT auth + encrypted settings persisted to DB
+
+---
+
+### Task 1.4: Basic Agent (Security) ✅
+**Completed:** Session 2
+
+- [x] `backend/agents/security_agent.py` — SQL injection, XSS, hardcoded secrets, weak crypto, IDOR
+- [x] `backend/agents/orchestrator.py` — provider-agnostic _call_llm, asyncio.gather parallel dispatch, per-agent timeout+error isolation
+- [x] analyzer.py updated to use real run_graph (stub removed)
+- [x] 72 tests passing (+11 new)
+
+**Deliverable:** ✅ Security agent + orchestrator wired into analysis pipeline
 
 ---
 
