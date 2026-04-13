@@ -11,15 +11,17 @@ Functions:
     post_comment: POST /reviews/{review_id}/post-comment -- post to GitHub PR.
 """
 
+import asyncio
 import logging
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.models.db_models import Finding, Review
+from backend.models.db_models import Finding, Repository, Review
 from backend.models.schemas import (
     AnalyzeResponse,
     CreateReviewRequest,
@@ -29,6 +31,8 @@ from backend.models.schemas import (
     ReviewListResponse,
     ReviewResponse,
 )
+from backend.services.analyzer import _build_comment_body, run_analysis
+from backend.services.github_api import get_github_client
 from backend.utils.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -221,7 +225,8 @@ async def analyze_review(
 
     logger.info(f"Analysis started for review {review.id}")
 
-    # TODO(phase-1.2): Queue async LangGraph orchestrator here.
+    # Fire-and-forget: run_analysis opens its own session internally.
+    asyncio.create_task(run_analysis(review.id))
 
     return AnalyzeResponse(review_id=review.id, status="analyzing")
 
@@ -272,10 +277,73 @@ async def post_comment(
             detail="Review has no findings to post",
         )
 
-    # TODO(phase-1.2): Call GitHub API to post the actual comment.
-    logger.info(f"Post-comment requested for review {review.id} (not yet implemented)")
+    # Load repository for owner / name / installation_id
+    repo = await session.get(Repository, review.repo_id)
+    if repo is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository not found for this review",
+        )
 
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="GitHub comment posting will be available in Phase 1.2",
-    )
+    github_client = get_github_client()
+    if github_client is None or repo.github_installation_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GitHub App is not configured; cannot post comment",
+        )
+
+    findings_dicts = [
+        {
+            "agent_name": f.agent_name,
+            "finding_type": f.finding_type,
+            "severity": f.severity,
+            "file_path": f.file_path,
+            "line_number": f.line_number,
+            "message": f.message,
+            "suggestion": f.suggestion,
+            "code_snippet": f.code_snippet,
+        }
+        for f in review.findings
+    ]
+
+    body = _build_comment_body(findings_dicts)
+
+    try:
+        if review.pr_comment_id:
+            await github_client.update_pr_comment(
+                owner=repo.github_repo_owner,
+                repo=repo.github_repo_name,
+                comment_id=review.pr_comment_id,
+                body=body,
+                installation_id=repo.github_installation_id,
+            )
+            comment_id = review.pr_comment_id
+            url = (
+                f"https://github.com/{repo.github_repo_owner}/{repo.github_repo_name}"
+                f"/issues/{review.github_pr_number}#issuecomment-{comment_id}"
+            )
+        else:
+            result = await github_client.post_pr_comment(
+                owner=repo.github_repo_owner,
+                repo=repo.github_repo_name,
+                pr_number=review.github_pr_number,
+                body=body,
+                installation_id=repo.github_installation_id,
+            )
+            comment_id = result["id"]
+            url = result["url"]
+            review.pr_comment_id = comment_id
+
+        review.pr_comment_posted = True
+        await session.flush()
+
+    except Exception as exc:
+        logger.error(f"GitHub comment post failed for review {review.id}: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"GitHub API error: {exc}",
+        )
+
+    posted_at = datetime.now(timezone.utc)
+    logger.info(f"Posted comment {comment_id} for review {review.id}")
+    return PostCommentResponse(comment_id=comment_id, url=url, posted_at=posted_at)

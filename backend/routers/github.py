@@ -8,6 +8,7 @@ Functions:
     github_webhook: POST /github/webhook handler.
 """
 
+import asyncio
 import logging
 import uuid
 
@@ -18,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import settings
 from backend.models.db_models import Repository, Review
 from backend.models.schemas import WebhookPayload
+from backend.services.analyzer import run_analysis
 from backend.utils.database import get_db
 from backend.utils.webhooks import verify_github_signature
 
@@ -137,5 +139,8 @@ async def github_webhook(
         f"Created review {review.id} for "
         f"{repo_owner}/{repo_name} PR #{payload.pull_request.number}"
     )
+
+    # Kick off analysis in the background; response returns immediately.
+    asyncio.create_task(run_analysis(review.id))
 
     return {"review_id": str(review.id), "status": "pending"}
