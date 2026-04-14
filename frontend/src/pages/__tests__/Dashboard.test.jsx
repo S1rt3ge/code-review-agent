@@ -33,6 +33,23 @@ const REVIEWS_RESPONSE = {
   total: 2,
 }
 
+const STATS_WITH_FINDINGS = {
+  ...STATS_RESPONSE,
+  findings_by_severity: {
+    critical: 2,
+    high: 5,
+    medium: 8,
+    low: 3,
+    info: 1,
+  },
+  findings_by_agent: {
+    security: 4,
+    performance: 3,
+    style: 6,
+    logic: 2,
+  },
+}
+
 function renderDashboard() {
   return render(
     <MemoryRouter>
@@ -141,5 +158,29 @@ describe('Dashboard page', () => {
       expect(viewLinks).toHaveLength(2)
       expect(viewLinks[0]).toHaveAttribute('href', '/reviews/rev-1')
     })
+  })
+
+  it('shows findings chart when findings_by_severity has data', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_WITH_FINDINGS), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(REVIEWS_RESPONSE), { status: 200 }))
+
+    renderDashboard()
+
+    await waitFor(() => {
+      // The FindingsChart renders severity label "critical"
+      expect(screen.getByText('critical')).toBeInTheDocument()
+    })
+  })
+
+  it('shows New Review button', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(REVIEWS_RESPONSE), { status: 200 }))
+
+    renderDashboard()
+
+    // Button is present immediately — no need to wait for data
+    expect(screen.getByRole('button', { name: 'New Review' })).toBeInTheDocument()
   })
 })
