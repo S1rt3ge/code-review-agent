@@ -27,15 +27,20 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend source
 COPY backend/ ./backend/
 COPY supabase/migrations/ ./supabase/migrations/
+COPY scripts/ ./scripts/
+COPY entrypoint.sh ./entrypoint.sh
 
 # Copy built frontend assets (can be served by a reverse-proxy or FastAPI StaticFiles)
 COPY --from=frontend-builder /frontend/dist ./frontend/dist
 
 # Non-root user for security
-RUN useradd -m -u 1001 appuser && chown -R appuser /app
+RUN useradd -m -u 1001 appuser \
+    && chown -R appuser /app \
+    && chmod +x /app/entrypoint.sh
+
 USER appuser
 
 EXPOSE 8000
 
-# Production: no --reload, 2 workers
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Runs migrations then starts the server
+CMD ["/app/entrypoint.sh"]

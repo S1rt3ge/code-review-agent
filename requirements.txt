@@ -2,6 +2,7 @@ fastapi>=0.104
 uvicorn[standard]>=0.24
 sqlalchemy>=2.0
 psycopg[binary]>=3.1
+asyncpg>=0.29
 alembic>=1.12
 anthropic>=0.7
 openai>=1.0
