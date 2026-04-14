@@ -89,17 +89,6 @@ app.include_router(reviews.router, prefix="/api")
 app.include_router(settings_router.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 
-# Serve built React frontend
-_FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
-if _FRONTEND_DIST.exists():
-    app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
-
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_spa(full_path: str) -> FileResponse:
-        """Serve index.html for all non-API routes (React Router SPA)."""
-        return FileResponse(_FRONTEND_DIST / "index.html")
-
-
 # ---------------------------------------------------------------------------
 # Health check
 # ---------------------------------------------------------------------------
@@ -162,3 +151,17 @@ async def websocket_progress(websocket: WebSocket, review_id: str) -> None:
         pass
     finally:
         ws_manager.disconnect(review_id, websocket)
+
+
+# ---------------------------------------------------------------------------
+# Serve built React frontend (must be last — catch-all matches everything)
+# ---------------------------------------------------------------------------
+
+_FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+if _FRONTEND_DIST.exists():
+    app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str) -> FileResponse:
+        """Serve index.html for all non-API routes (React Router SPA)."""
+        return FileResponse(_FRONTEND_DIST / "index.html")
