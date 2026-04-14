@@ -51,20 +51,25 @@ async def register(
             detail="Email is already registered",
         )
 
-    # Check for duplicate username
-    existing_username = await session.execute(
-        select(User).where(User.username == payload.username)
-    )
-    if existing_username.scalar_one_or_none() is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Username is already taken",
+    # Derive username from email prefix if not provided
+    username = payload.username or payload.email.split("@")[0]
+
+    # Ensure username is unique (append suffix if taken)
+    base = username
+    suffix = 1
+    while True:
+        existing_username = await session.execute(
+            select(User).where(User.username == username)
         )
+        if existing_username.scalar_one_or_none() is None:
+            break
+        username = f"{base}{suffix}"
+        suffix += 1
 
     user = User(
         id=uuid.uuid4(),
         email=payload.email,
-        username=payload.username,
+        username=username,
         hashed_password=hash_password(payload.password),
     )
     session.add(user)

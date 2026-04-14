@@ -37,8 +37,8 @@ class RegisterRequest(BaseModel):
     """Request body for user registration."""
 
     email: str
-    username: str
     password: str
+    username: str = ""
 
 
 class LoginRequest(BaseModel):
