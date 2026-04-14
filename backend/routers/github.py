@@ -2,13 +2,17 @@
 
 Receives pull_request events from GitHub, verifies the HMAC-SHA256
 signature, creates a review record, and returns 202 Accepted so
-the caller does not block on analysis.
+the caller does not block on analysis.  Also handles GitHub App
+installation and installation_repositories events to store
+installation IDs on repository records.
 
 Functions:
     github_webhook: POST /github/webhook handler.
+    _handle_installation_event: Process installation lifecycle events.
 """
 
 import asyncio
+import json
 import logging
 import uuid
 
@@ -61,6 +65,7 @@ async def github_webhook(
     """
     # Read raw body for signature verification
     body = await request.body()
+    event_type = request.headers.get("X-GitHub-Event", "")
 
     # Verify HMAC-SHA256 signature
     signature = request.headers.get("X-Hub-Signature-256")
@@ -70,6 +75,10 @@ async def github_webhook(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid webhook signature",
         )
+
+    # Handle GitHub App installation events
+    if event_type in ("installation", "installation_repositories"):
+        return await _handle_installation_event(body, session)
 
     # Parse payload
     try:
@@ -149,3 +158,100 @@ async def github_webhook(
     task.add_done_callback(_background_tasks.discard)
 
     return {"review_id": str(review.id), "status": "pending"}
+
+
+# ---------------------------------------------------------------------------
+# Installation event helpers
+# ---------------------------------------------------------------------------
+
+
+async def _handle_installation_event(
+    body: bytes, session: AsyncSession
+) -> dict[str, str]:
+    """Process GitHub App installation and installation_repositories events.
+
+    For ``installation`` with ``action=created``, iterates over the
+    ``repositories`` list and upserts each one, setting the
+    ``github_installation_id``.
+
+    For ``installation_repositories`` with ``action=added``, does the same
+    for ``repositories_added``.  With ``action=removed``, disables
+    (``enabled=False``) each repository in ``repositories_removed``.
+
+    Args:
+        body: Raw request body bytes.
+        session: Async database session.
+
+    Returns:
+        ``{"status": "ok"}`` regardless of outcome.
+    """
+    try:
+        payload = json.loads(body)
+
+        installation_id: int = payload["installation"]["id"]
+        account_login: str = payload["installation"]["account"]["login"]
+        action: str = payload.get("action", "")
+
+        repos_to_upsert: list[dict] = []
+        repos_to_disable: list[dict] = []
+
+        if action == "created" and "repositories" in payload:
+            repos_to_upsert = payload["repositories"] or []
+        elif action == "added" and "repositories_added" in payload:
+            repos_to_upsert = payload["repositories_added"] or []
+        elif action == "removed" and "repositories_removed" in payload:
+            repos_to_disable = payload["repositories_removed"] or []
+
+        # Upsert repositories (set installation_id, re-enable if disabled)
+        for repo_info in repos_to_upsert:
+            full_name: str = repo_info.get("full_name", "")
+            if "/" not in full_name:
+                continue
+            owner, name = full_name.split("/", 1)
+
+            stmt = select(Repository).where(
+                Repository.github_repo_owner == owner,
+                Repository.github_repo_name == name,
+            )
+            result = await session.execute(stmt)
+            repo = result.scalar_one_or_none()
+
+            if repo is not None:
+                repo.github_installation_id = installation_id
+                repo.enabled = True
+                logger.info(
+                    f"Updated installation_id={installation_id} on {full_name}"
+                )
+            else:
+                logger.info(
+                    f"Skipping {full_name}: not registered by any user"
+                )
+
+        # Disable removed repositories
+        for repo_info in repos_to_disable:
+            full_name = repo_info.get("full_name", "")
+            if "/" not in full_name:
+                continue
+            owner, name = full_name.split("/", 1)
+
+            stmt = select(Repository).where(
+                Repository.github_repo_owner == owner,
+                Repository.github_repo_name == name,
+            )
+            result = await session.execute(stmt)
+            repo = result.scalar_one_or_none()
+
+            if repo is not None:
+                repo.enabled = False
+                logger.info(f"Disabled repository {full_name} (removed from installation)")
+
+        await session.flush()
+        logger.info(
+            f"Processed installation event action={action} "
+            f"account={account_login} installation_id={installation_id}"
+        )
+
+    except Exception as exc:
+        logger.error(f"Failed to process installation event: {exc}", exc_info=True)
+
+    return {"status": "ok"}
