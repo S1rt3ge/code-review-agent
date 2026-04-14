@@ -18,10 +18,10 @@
 | 2.2 Parallel Execution | ✅ Done | — |
 | 2.3 Result Aggregation | ✅ Done | — |
 | 2.4 PR Comment Generation | ✅ Done | 127 passing |
-| **3.1 Dashboard Pages** | **⬅ NEXT** | — |
-| 3.2 API Integration | — | — |
-| 3.3 Real-time Progress | — | — |
-| 3.4 Styling & Polish | — | — |
+| 3.1 Dashboard Pages | ✅ Done | build clean |
+| 3.2 API Integration | ✅ Done | useApi + useSettings |
+| 3.3 Real-time Progress | ✅ Done | useWebsocket |
+| **3.4 Auth Flow (Login/Register)** | **⬅ NEXT** | — |
 
 **Run tests:** `docker compose --profile test run --rm tests`
 **Run backend:** `docker compose up backend`
