@@ -8,6 +8,7 @@ const Login = lazy(() => import('@/pages/Login.jsx').then(m => ({ default: m.Log
 const Dashboard = lazy(() => import('@/pages/Dashboard.jsx').then(m => ({ default: m.Dashboard })))
 const ReviewDetail = lazy(() => import('@/pages/ReviewDetail.jsx').then(m => ({ default: m.ReviewDetail })))
 const Settings = lazy(() => import('@/pages/Settings.jsx').then(m => ({ default: m.Settings })))
+const Repositories = lazy(() => import('@/pages/Repositories.jsx').then(m => ({ default: m.Repositories })))
 
 /**
  * Loading fallback shown while lazy pages are being fetched.
@@ -60,6 +61,7 @@ export function App() {
                       <Routes>
                         <Route path="/" element={<Dashboard />} />
                         <Route path="/reviews/:id" element={<ReviewDetail />} />
+                        <Route path="/repositories" element={<Repositories />} />
                         <Route path="/settings" element={<Settings />} />
                         <Route path="*" element={<Navigate to="/" replace />} />
                       </Routes>

@@ -210,19 +210,14 @@ export function Dashboard() {
             <div className="px-6 py-5 flex gap-4">
               <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">2</div>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Add a GitHub Webhook</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 mb-2">
-                  In your GitHub repository go to <strong className="text-gray-700 dark:text-gray-300">Settings → Webhooks → Add webhook</strong> and fill in:
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Add your repository</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                  Go to the{' '}
+                  <a href="/repositories" className="text-blue-600 dark:text-blue-400 hover:underline">
+                    Add your repository
+                  </a>{' '}
+                  page to connect a GitHub repo and get the webhook URL to configure in GitHub.
                 </p>
-                <ul className="text-sm text-gray-500 dark:text-gray-400 space-y-1 ml-3 list-disc">
-                  <li><span className="font-medium text-gray-700 dark:text-gray-300">Payload URL:</span>{' '}
-                    <code className="text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded font-mono break-all">
-                      {window.location.origin}/api/github/webhook
-                    </code>
-                  </li>
-                  <li><span className="font-medium text-gray-700 dark:text-gray-300">Content type:</span> <code className="text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">application/json</code></li>
-                  <li><span className="font-medium text-gray-700 dark:text-gray-300">Events:</span> select <em>Pull requests</em></li>
-                </ul>
               </div>
             </div>
 

@@ -14,6 +14,7 @@ const API_BASE_URL = '/api'
  *   get: (endpoint: string) => Promise<any>,
  *   post: (endpoint: string, body: any) => Promise<any>,
  *   put: (endpoint: string, body: any) => Promise<any>,
+ *   patch: (endpoint: string, body: any) => Promise<any>,
  *   del: (endpoint: string) => Promise<any>,
  *   loading: boolean,
  *   error: string|null
@@ -110,11 +111,19 @@ export function useApi() {
   const put = useCallback((endpoint, body) => request('PUT', endpoint, body), [request])
 
   /**
+   * HTTP PATCH request.
+   * @param {string} endpoint
+   * @param {unknown} body
+   * @returns {Promise<any>}
+   */
+  const patch = useCallback((endpoint, body) => request('PATCH', endpoint, body), [request])
+
+  /**
    * HTTP DELETE request.
    * @param {string} endpoint
    * @returns {Promise<any>}
    */
   const del = useCallback(endpoint => request('DELETE', endpoint), [request])
 
-  return { get, post, put, del, loading, error }
+  return { get, post, put, patch, del, loading, error }
 }

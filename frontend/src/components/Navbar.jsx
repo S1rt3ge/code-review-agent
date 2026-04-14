@@ -11,6 +11,7 @@ import { useUiStore, useAuthStore } from '@/store/index.js'
 /** @type {NavItem[]} */
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard' },
+  { to: '/repositories', label: 'Repositories' },
   { to: '/settings', label: 'Settings' }
 ]
 
