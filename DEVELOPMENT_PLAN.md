@@ -21,7 +21,7 @@
 | 3.1 Dashboard Pages | ✅ Done | build clean |
 | 3.2 API Integration | ✅ Done | useApi + useSettings |
 | 3.3 Real-time Progress | ✅ Done | useWebsocket |
-| **3.4 Auth Flow (Login/Register)** | **⬅ NEXT** | — |
+| 3.4 Auth Flow (Login/Register) | ✅ Done | build clean |
 
 **Run tests:** `docker compose --profile test run --rm tests`
 **Run backend:** `docker compose up backend`
