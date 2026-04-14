@@ -14,11 +14,14 @@
 | 1.2 GitHub Integration | ✅ Done | — |
 | 1.3 JWT Auth & Settings | ✅ Done | — |
 | 1.4 Security Agent + Orchestrator | ✅ Done | 72 passing |
-| **2.1 Remaining Agents** | **⬅ NEXT** | — |
-| 2.2 Parallel Execution | — | — |
-| 2.3 Result Aggregation | — | — |
-| 2.4 PR Comment Generation | — | — |
-| 3.x Frontend | — | — |
+| 2.1 Remaining Agents | ✅ Done | — |
+| 2.2 Parallel Execution | ✅ Done | — |
+| 2.3 Result Aggregation | ✅ Done | — |
+| 2.4 PR Comment Generation | ✅ Done | 127 passing |
+| **3.1 Dashboard Pages** | **⬅ NEXT** | — |
+| 3.2 API Integration | — | — |
+| 3.3 Real-time Progress | — | — |
+| 3.4 Styling & Polish | — | — |
 
 **Run tests:** `docker compose --profile test run --rm tests`
 **Run backend:** `docker compose up backend`
