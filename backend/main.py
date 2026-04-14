@@ -1,12 +1,12 @@
 """FastAPI application entry point.
 
 Configures CORS, includes all API routers, provides a health-check
-endpoint, a WebSocket placeholder for real-time progress, and
+endpoint, a WebSocket endpoint for real-time agent progress, and
 startup/shutdown lifecycle hooks for the database engine.
 
 Functions:
     health_check: GET /health -- application health probe.
-    websocket_progress: WS /ws/progress/{review_id} -- placeholder.
+    websocket_progress: WS /ws/progress/{review_id} -- real-time agent updates.
     startup: Verify database connectivity on startup.
     shutdown: Dispose of the async engine on shutdown.
 """
@@ -23,6 +23,7 @@ from backend.config import settings
 from backend.models.schemas import HealthResponse
 from backend.routers import auth, dashboard, github, reviews
 from backend.routers import settings as settings_router
+from backend.services.ws_manager import ws_manager
 from backend.utils.database import async_session_factory, engine
 
 logger = logging.getLogger(__name__)
@@ -115,7 +116,7 @@ async def health_check() -> HealthResponse:
 
 
 # ---------------------------------------------------------------------------
-# WebSocket placeholder
+# WebSocket — real-time agent progress
 # ---------------------------------------------------------------------------
 
 
@@ -124,24 +125,24 @@ async def websocket_progress(websocket: WebSocket, review_id: str) -> None:
     """WebSocket endpoint for real-time review progress updates.
 
     Clients connect while a review is being analyzed to receive
-    incremental status messages from each agent.
+    incremental status messages from each agent as they start and finish.
+    The connection stays open until the client disconnects; no messages
+    need to be sent from the client side.
+
+    Message format pushed to clients:
+        {"agent_name": "security", "status": "running"|"done"|"error"}
 
     Args:
         websocket: The WebSocket connection.
         review_id: UUID of the review being monitored.
     """
-    await websocket.accept()
-    logger.info(f"WebSocket connected for review {review_id}")
-
+    await ws_manager.connect(review_id, websocket)
     try:
-        # In Phase 1.2+ this loop will be replaced with a pubsub
-        # listener that pushes agent status changes to the client.
+        # Keep the connection alive; updates are pushed by the analyzer.
         while True:
-            data = await websocket.receive_text()
-            await websocket.send_json({
-                "review_id": review_id,
-                "status": "pending",
-                "message": "Real-time updates will be available in Phase 1.2",
-            })
+            # receive_text() blocks until the client sends or disconnects.
+            await websocket.receive_text()
     except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for review {review_id}")
+        pass
+    finally:
+        ws_manager.disconnect(review_id, websocket)
