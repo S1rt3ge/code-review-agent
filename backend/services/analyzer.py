@@ -23,6 +23,7 @@ from backend.agents.orchestrator import run_graph
 from backend.models.db_models import AgentExecution, Finding, Repository, Review, User
 from backend.services.code_extractor import CodeChunk, extract_chunks
 from backend.services.github_api import GitHubApiClient, get_github_client
+from backend.services.result_aggregator import aggregate
 from backend.utils.crypto import decrypt_value
 from backend.utils.database import async_session_factory
 
@@ -172,6 +173,9 @@ async def _run_analysis_inner(session: AsyncSession, review_id: uuid.UUID) -> No
         ollama_enabled=ollama_enabled,
         ollama_host=ollama_host,
     )
+
+    # ── 4b. Deduplicate and rank findings ─────────────────────────────────────
+    all_findings = aggregate(all_findings)
 
     # ── 5. Persist findings and agent execution records ────────────────────────
     now = datetime.now(timezone.utc)
