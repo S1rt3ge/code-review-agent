@@ -1,8 +1,10 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Navbar } from '@/components/Navbar.jsx'
+import { ProtectedRoute } from '@/components/ProtectedRoute.jsx'
 import { useUiStore } from '@/store/index.js'
 
+const Login = lazy(() => import('@/pages/Login.jsx').then(m => ({ default: m.Login })))
 const Dashboard = lazy(() => import('@/pages/Dashboard.jsx').then(m => ({ default: m.Dashboard })))
 const ReviewDetail = lazy(() => import('@/pages/ReviewDetail.jsx').then(m => ({ default: m.ReviewDetail })))
 const Settings = lazy(() => import('@/pages/Settings.jsx').then(m => ({ default: m.Settings })))
@@ -24,6 +26,8 @@ function PageLoader() {
 
 /**
  * Root application component. Sets up routing, dark mode, and lazy-loaded pages.
+ * Public route: /login. All other routes require authentication.
+ *
  * @returns {React.ReactElement}
  */
 export function App() {
@@ -40,16 +44,32 @@ export function App() {
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
-        <Navbar />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/reviews/:id" element={<ReviewDetail />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-          </Suspense>
-        </main>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            {/* Public */}
+            <Route path="/login" element={<Login />} />
+
+            {/* Protected — Navbar shown inside so login page stays fullscreen */}
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute>
+                  <Navbar />
+                  <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    <Suspense fallback={<PageLoader />}>
+                      <Routes>
+                        <Route path="/" element={<Dashboard />} />
+                        <Route path="/reviews/:id" element={<ReviewDetail />} />
+                        <Route path="/settings" element={<Settings />} />
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                      </Routes>
+                    </Suspense>
+                  </main>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </Suspense>
       </div>
     </BrowserRouter>
   )
