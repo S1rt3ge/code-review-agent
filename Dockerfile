@@ -43,4 +43,5 @@ USER appuser
 EXPOSE 8000
 
 # Runs migrations then starts the server
-CMD ["/app/entrypoint.sh"]
+# Use sh explicitly to avoid CRLF shebang issues on Windows-built images
+CMD ["sh", "/app/entrypoint.sh"]
