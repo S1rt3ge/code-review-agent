@@ -53,10 +53,11 @@ async def run() -> None:
                 continue
             print(f"  apply {path.name} ... ", end="", flush=True)
             sql = path.read_text(encoding="utf-8")
-            await conn.execute(sql)
-            await conn.execute(
-                "INSERT INTO schema_migrations (filename) VALUES ($1)", path.name
-            )
+            async with conn.transaction():
+                await conn.execute(sql)
+                await conn.execute(
+                    "INSERT INTO schema_migrations (filename) VALUES ($1)", path.name
+                )
             print("done")
 
         print("Migrations complete.")
