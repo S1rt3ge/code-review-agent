@@ -15,6 +15,7 @@ import asyncio
 import json
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -91,16 +92,20 @@ async def _run_agent(
     agent_name: str,
     chunks: list[CodeChunk],
     config: LLMConfig,
+    on_progress: Callable[[str, str], Awaitable[None]] | None = None,
 ) -> tuple[list[dict], dict]:
     """Run a single named agent and return (findings, execution_meta).
 
     Imports the agent module lazily to keep orchestrator imports clean.
     Catches all errors so one failing agent never blocks the others.
+    Calls ``on_progress(agent_name, status)`` on start and completion so
+    callers can push real-time updates to WebSocket clients.
 
     Args:
         agent_name: One of ``security``, ``performance``, ``style``, ``logic``.
         chunks: Code chunks to analyse.
         config: LLM configuration to use.
+        on_progress: Optional async callback ``(agent_name, status) → None``.
 
     Returns:
         Tuple of (flat findings list, execution metadata dict).
@@ -110,6 +115,12 @@ async def _run_agent(
     error_message: str | None = None
     tokens_in = 0
     tokens_out = 0
+
+    if on_progress:
+        try:
+            await on_progress(agent_name, "running")
+        except Exception:
+            pass  # Never let progress callbacks crash the agent
 
     try:
         # Dynamic import so adding new agents never requires touching this file.
@@ -146,6 +157,12 @@ async def _run_agent(
     completed_at = datetime.now(timezone.utc)
     agent_status = "error" if error_message else "done"
 
+    if on_progress:
+        try:
+            await on_progress(agent_name, agent_status)
+        except Exception:
+            pass
+
     meta = {
         "status": agent_status,
         "started_at": started_at,
@@ -172,6 +189,7 @@ async def run_graph(
     api_key_gpt: str | None = None,
     ollama_enabled: bool = False,
     ollama_host: str | None = None,
+    on_progress: Callable[[str, str], Awaitable[None]] | None = None,
 ) -> tuple[list[dict], dict[str, dict]]:
     """Run all selected agents in parallel and aggregate their findings.
 
@@ -184,6 +202,8 @@ async def run_graph(
         api_key_gpt: User's decrypted GPT API key (or None to use app key).
         ollama_enabled: Whether Ollama is enabled for this user.
         ollama_host: Ollama base URL override.
+        on_progress: Optional async callback ``(agent_name, status) → None`` called
+            when each agent starts (``"running"``) and finishes (``"done"``/``"error"``).
 
     Returns:
         Tuple of (flat findings list, per-agent execution metadata dict).
@@ -238,7 +258,7 @@ async def run_graph(
         return [], empty_meta
 
     # Run all agents concurrently.
-    tasks = [_run_agent(agent_name, chunks, config) for agent_name in agents]
+    tasks = [_run_agent(agent_name, chunks, config, on_progress) for agent_name in agents]
     results = await asyncio.gather(*tasks)
 
     all_findings: list[dict] = []
