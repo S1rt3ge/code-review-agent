@@ -1,12 +1,41 @@
-FROM python:3.12-slim
+# ── Stage 1: Build React frontend ────────────────────────────────────────────
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /frontend
+
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --legacy-peer-deps
+
+COPY frontend/ ./
+RUN npm run build
+
+
+# ── Stage 2: Production backend ──────────────────────────────────────────────
+FROM python:3.12-slim AS backend
+
+# System deps for psycopg binary wheel
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+# Install Python dependencies first (better layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Copy backend source
+COPY backend/ ./backend/
+COPY supabase/migrations/ ./supabase/migrations/
+
+# Copy built frontend assets (can be served by a reverse-proxy or FastAPI StaticFiles)
+COPY --from=frontend-builder /frontend/dist ./frontend/dist
+
+# Non-root user for security
+RUN useradd -m -u 1001 appuser && chown -R appuser /app
+USER appuser
 
 EXPOSE 8000
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Production: no --reload, 2 workers
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
