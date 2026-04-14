@@ -41,6 +41,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 
+# Strong references to background analysis tasks prevent them from being
+# garbage-collected before they finish (asyncio.create_task is fire-and-forget
+# and the GC can destroy the task otherwise).
+_background_tasks: set[asyncio.Task] = set()
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -237,7 +242,10 @@ async def analyze_review(
     logger.info(f"Analysis started for review {review.id}")
 
     # Fire-and-forget: run_analysis opens its own session internally.
-    asyncio.create_task(run_analysis(review.id))
+    # Keep a strong reference so the GC doesn't destroy the task mid-execution.
+    task = asyncio.create_task(run_analysis(review.id))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
     return AnalyzeResponse(review_id=review.id, status="analyzing")
 
