@@ -1,19 +1,7 @@
 import { useState, useCallback } from 'react'
+import { useAuthStore } from '@/store/index.js'
 
 const API_BASE_URL = '/api'
-
-/**
- * Retrieve the JWT token from localStorage.
- * @returns {string} The stored token
- * @throws {Error} If no token is found
- */
-function getToken() {
-  const token = localStorage.getItem('token')
-  if (!token) {
-    throw new Error('Not authenticated')
-  }
-  return token
-}
 
 /**
  * Hook providing typed API methods with shared loading and error state.
@@ -34,6 +22,8 @@ function getToken() {
 export function useApi() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const token = useAuthStore(s => s.token)
+  const clearAuth = useAuthStore(s => s.clearAuth)
 
   /**
    * Internal request helper shared by all HTTP methods.
@@ -47,7 +37,7 @@ export function useApi() {
     setError(null)
 
     try {
-      const token = getToken()
+      if (!token) throw new Error('Not authenticated')
 
       /** @type {RequestInit} */
       const options = {
@@ -65,6 +55,10 @@ export function useApi() {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, options)
 
       if (!response.ok) {
+        // Token expired or revoked — clear auth so ProtectedRoute redirects to login
+        if (response.status === 401) {
+          clearAuth()
+        }
         let detail = `HTTP ${response.status}`
         try {
           const errorBody = await response.json()
@@ -90,7 +84,7 @@ export function useApi() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [token, clearAuth])
 
   /**
    * HTTP GET request.
