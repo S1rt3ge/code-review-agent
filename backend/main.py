@@ -25,7 +25,7 @@ from sqlalchemy import text
 
 from backend.config import settings
 from backend.models.schemas import HealthResponse
-from backend.routers import auth, dashboard, github, reviews
+from backend.routers import auth, dashboard, github, repositories, reviews
 from backend.routers import settings as settings_router
 from backend.services.ws_manager import ws_manager
 from backend.utils.database import async_session_factory, engine
@@ -88,6 +88,7 @@ app.include_router(github.router, prefix="/api")
 app.include_router(reviews.router, prefix="/api")
 app.include_router(settings_router.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+app.include_router(repositories.router, prefix="/api")
 
 # ---------------------------------------------------------------------------
 # Health check
