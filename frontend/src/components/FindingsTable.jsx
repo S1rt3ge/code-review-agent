@@ -16,7 +16,7 @@ import { useMemo } from 'react'
  */
 
 /** @type {Record<Severity, number>} */
-const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }
+const SEVERITY_ORDER = { critical: 0, high: 1, warning: 1, medium: 2, low: 3, info: 4 }
 
 /** @type {Record<Severity, string>} */
 const SEVERITY_BADGE_CLASSES = {
