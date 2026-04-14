@@ -130,7 +130,7 @@ export function Dashboard() {
     setReviewsError(null)
     try {
       const data = await get('/reviews?limit=20')
-      setReviews(data)
+      setReviews(data.reviews ?? [])
     } catch (err) {
       setReviewsError(err instanceof Error ? err.message : 'Failed to load reviews')
     } finally {
@@ -161,16 +161,16 @@ export function Dashboard() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Total Reviews" value={stats?.totalReviews ?? 0} icon="📊" />
-          <StatCard label="Reviews Today" value={stats?.reviewsToday ?? 0} icon="📅" />
+          <StatCard label="Total Reviews" value={stats?.total_reviews ?? 0} icon="📊" />
+          <StatCard label="Reviews Today" value={stats?.reviews_today ?? 0} icon="📅" />
           <StatCard
             label="Tokens Used"
-            value={`${(((stats?.tokenUsed) ?? 0) / 1000).toFixed(1)}k`}
+            value={`${((stats?.tokens_used_this_month ?? 0) / 1000).toFixed(1)}k`}
             icon="🔢"
           />
           <StatCard
             label="Cost This Month"
-            value={`$${((stats?.estimatedCost) ?? 0).toFixed(2)}`}
+            value={`$${Number(stats?.estimated_cost_this_month ?? 0).toFixed(2)}`}
             icon="💰"
           />
         </div>
@@ -238,12 +238,12 @@ export function Dashboard() {
                   >
                     <td className="py-3 px-4">
                       <span className="font-medium text-gray-800 dark:text-gray-200">
-                        {review.repo}
+                        {review.github_pr_title ?? `PR #${review.github_pr_number}`}
                       </span>
                     </td>
                     <td className="py-3 px-4">
                       <span className="text-gray-600 dark:text-gray-400 font-mono">
-                        #{review.prNumber}
+                        #{review.github_pr_number}
                       </span>
                     </td>
                     <td className="py-3 px-4">
@@ -252,16 +252,16 @@ export function Dashboard() {
                     <td className="py-3 px-4 text-right">
                       <span
                         className={`font-medium ${
-                          review.totalFindings > 0
+                          review.total_findings > 0
                             ? 'text-yellow-600 dark:text-yellow-400'
                             : 'text-green-600 dark:text-green-400'
                         }`}
                       >
-                        {review.totalFindings}
+                        {review.total_findings}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                      {formatRelativeTime(review.createdAt)}
+                      {formatRelativeTime(review.created_at)}
                     </td>
                     <td className="py-3 px-4 text-right">
                       <Link
