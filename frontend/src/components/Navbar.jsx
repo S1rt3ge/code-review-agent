@@ -1,5 +1,5 @@
-import { NavLink } from 'react-router-dom'
-import { useUiStore } from '@/store/index.js'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { useUiStore, useAuthStore } from '@/store/index.js'
 
 /**
  * Navigation link item descriptor.
@@ -23,6 +23,14 @@ const NAV_ITEMS = [
 export function Navbar() {
   const darkMode = useUiStore(state => state.darkMode)
   const toggleDarkMode = useUiStore(state => state.toggleDarkMode)
+  const user = useAuthStore(s => s.user)
+  const clearAuth = useAuthStore(s => s.clearAuth)
+  const navigate = useNavigate()
+
+  function handleLogout() {
+    clearAuth()
+    navigate('/login', { replace: true })
+  }
 
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
@@ -55,6 +63,14 @@ export function Navbar() {
             </nav>
           </div>
 
+          {/* Right side: user email + dark mode + logout */}
+          <div className="flex items-center gap-2">
+            {user?.email && (
+              <span className="hidden sm:block text-xs text-gray-500 dark:text-gray-400 max-w-[160px] truncate">
+                {user.email}
+              </span>
+            )}
+
           {/* Dark mode toggle */}
           <button
             type="button"
@@ -78,6 +94,20 @@ export function Navbar() {
               </svg>
             )}
           </button>
+
+            {/* Logout */}
+            <button
+              type="button"
+              onClick={handleLogout}
+              aria-label="Sign out"
+              className="p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+              title="Sign out"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Mobile navigation */}
