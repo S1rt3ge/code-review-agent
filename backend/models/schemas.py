@@ -18,6 +18,9 @@ Classes:
     PostCommentRequest: Request to post findings as a PR comment.
     PostCommentResponse: Response after posting a PR comment.
     AnalyzeResponse: Response after triggering analysis.
+    RepositoryResponse: Single repository record.
+    CreateRepositoryRequest: Request body for adding a repository.
+    RepositoryListResponse: List of repositories with count.
     HealthResponse: Health check response.
 """
 
@@ -349,6 +352,43 @@ class AnalyzeResponse(BaseModel):
 
     review_id: UUID
     status: str
+
+
+# ---------------------------------------------------------------------------
+# Repositories
+# ---------------------------------------------------------------------------
+
+
+class RepositoryResponse(BaseModel):
+    """Single repository record returned by the API."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    github_repo_owner: str
+    github_repo_name: str
+    github_repo_url: str
+    github_installation_id: int | None
+    enabled: bool
+    created_at: datetime
+
+
+class CreateRepositoryRequest(BaseModel):
+    """Request body for adding a new repository."""
+
+    github_repo_owner: str = Field(
+        ..., min_length=1, max_length=100, description="GitHub owner (user or org)"
+    )
+    github_repo_name: str = Field(
+        ..., min_length=1, max_length=100, description="Repository name"
+    )
+
+
+class RepositoryListResponse(BaseModel):
+    """List of repositories with total count."""
+
+    repositories: list[RepositoryResponse]
+    total: int
 
 
 # ---------------------------------------------------------------------------
