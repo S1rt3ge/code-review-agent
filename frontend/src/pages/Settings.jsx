@@ -162,7 +162,11 @@ export function Settings() {
       setSettings(updated)
       setApiKeyClaude('')
       setApiKeyGpt('')
-      setSaveMsg('Settings saved successfully.')
+      if (updated.warnings?.length) {
+        setSaveMsg(`Saved with warnings: ${updated.warnings.join('; ')}`)
+      } else {
+        setSaveMsg('Settings saved successfully.')
+      }
     } catch (err) {
       setSaveMsg(`Failed to save: ${err instanceof Error ? err.message : 'unknown error'}`)
     } finally {
