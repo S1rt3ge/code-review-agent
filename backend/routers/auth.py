@@ -10,11 +10,12 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.db_models import User
-from backend.models.schemas import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from backend.models.schemas import RegisterRequest, TokenResponse, UserResponse
 from backend.utils.auth import create_access_token, get_current_user, hash_password, verify_password
 from backend.utils.database import get_db
 
@@ -82,15 +83,16 @@ async def register(
 
 @router.post("/token", response_model=TokenResponse)
 async def login(
-    payload: LoginRequest,
+    form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     """Authenticate with email and password, returning a JWT.
 
+    Accepts OAuth2 form-encoded body (username=email&password=...).
     Also accessible at POST /auth/login for convenience.
 
     Args:
-        payload: Email and password credentials.
+        form_data: OAuth2 form with username (email) and password.
         session: Async database session.
 
     Returns:
@@ -99,7 +101,7 @@ async def login(
     Raises:
         HTTPException 401: If credentials are invalid.
     """
-    result = await session.execute(select(User).where(User.email == payload.email))
+    result = await session.execute(select(User).where(User.email == form_data.username))
     user = result.scalar_one_or_none()
 
     invalid_exc = HTTPException(
@@ -111,7 +113,7 @@ async def login(
     if user is None or not user.hashed_password:
         raise invalid_exc
 
-    if not verify_password(payload.password, user.hashed_password):
+    if not verify_password(form_data.password, user.hashed_password):
         raise invalid_exc
 
     token = create_access_token(user_id=user.id, email=user.email)
