@@ -2,7 +2,7 @@
 dockerfile = "Dockerfile"
 
 [deploy]
-startCommand = "python scripts/migrate.py && python -m uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
+startCommand = "python scripts/migrate.py && echo \"PORT=$PORT\" && exec python -m uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"
