@@ -31,7 +31,8 @@ from backend.models.schemas import (
     ReviewListResponse,
     ReviewResponse,
 )
-from backend.services.analyzer import _build_comment_body, run_analysis
+from backend.services.analyzer import run_analysis
+from backend.services.pr_commenter import build_comment
 from backend.services.github_api import get_github_client
 from backend.utils.auth import get_current_user
 from backend.utils.database import get_db
@@ -309,7 +310,7 @@ async def post_comment(
         for f in review.findings
     ]
 
-    body = _build_comment_body(findings_dicts)
+    body = build_comment(findings_dicts)
 
     try:
         if review.pr_comment_id:
