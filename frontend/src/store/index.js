@@ -63,7 +63,7 @@ export const useSettingsStore = create(set => ({
   apiKeyGpt: '',
   ollamaEnabled: false,
   ollamaHost: 'http://localhost:11434',
-  selectedAgents: ['security', 'performance', 'style'],
+  selectedAgents: ['security', 'performance', 'style', 'logic'],
   lmPreference: 'auto',
 
   /**
