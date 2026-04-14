@@ -135,6 +135,14 @@ async def create_review(
     session.add(review)
     await session.flush()
 
+    # Re-fetch with relationships so Pydantic can serialize them
+    result = await session.execute(
+        select(Review)
+        .where(Review.id == review.id)
+        .options(selectinload(Review.findings), selectinload(Review.agent_executions))
+    )
+    review = result.scalar_one()
+
     logger.info(f"Manually created review {review.id} for PR #{payload.github_pr_number}")
 
     return ReviewResponse.model_validate(review)
