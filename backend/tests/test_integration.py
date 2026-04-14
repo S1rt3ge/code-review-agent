@@ -109,6 +109,7 @@ async def db_repo_id(auth_headers, client):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_register_success(client):
     r = await client.post(
@@ -119,6 +120,7 @@ async def test_register_success(client):
     assert "access_token" in r.json()
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_register_duplicate_email_rejected(client):
     email = _unique_email()
@@ -128,6 +130,7 @@ async def test_register_duplicate_email_rejected(client):
     assert r.status_code == 409
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_login_wrong_password(client):
     email = _unique_email()
@@ -143,6 +146,7 @@ async def test_login_wrong_password(client):
     assert r.status_code == 401
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_me_returns_current_user(client, auth_headers):
     r = await client.get("/api/auth/me", headers=auth_headers)
@@ -150,12 +154,14 @@ async def test_me_returns_current_user(client, auth_headers):
     assert "email" in r.json()
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_protected_route_rejects_no_token(client):
     r = await client.get("/api/reviews")
     assert r.status_code == 401
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_protected_route_rejects_bad_token(client):
     r = await client.get("/api/reviews", headers={"Authorization": "Bearer garbage"})
@@ -167,6 +173,7 @@ async def test_protected_route_rejects_bad_token(client):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_create_review(client, auth_headers, db_repo_id):
     r = await client.post(
@@ -180,6 +187,7 @@ async def test_create_review(client, auth_headers, db_repo_id):
     assert body["github_pr_number"] == 42
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_list_reviews_scoped_to_user(client, auth_headers, db_repo_id):
     # Create one review
@@ -196,6 +204,7 @@ async def test_list_reviews_scoped_to_user(client, auth_headers, db_repo_id):
     assert body["total"] >= 1
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_get_review_detail(client, auth_headers, db_repo_id):
     r = await client.post(
@@ -209,12 +218,14 @@ async def test_get_review_detail(client, auth_headers, db_repo_id):
     assert r.json()["id"] == review_id
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_get_review_not_found(client, auth_headers):
     r = await client.get(f"/api/reviews/{uuid.uuid4()}", headers=auth_headers)
     assert r.status_code == 404
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_analyze_sets_status_analyzing(client, auth_headers, db_repo_id):
     r = await client.post(
@@ -230,6 +241,7 @@ async def test_analyze_sets_status_analyzing(client, auth_headers, db_repo_id):
     assert r.json()["status"] == "analyzing"
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_analyze_conflict_when_already_analyzing(client, auth_headers, db_repo_id):
     r = await client.post(
@@ -250,6 +262,7 @@ async def test_analyze_conflict_when_already_analyzing(client, auth_headers, db_
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_get_settings_default(client, auth_headers):
     r = await client.get("/api/settings", headers=auth_headers)
@@ -260,6 +273,7 @@ async def test_get_settings_default(client, auth_headers):
     assert "lm_preference" in body
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_update_settings_agents(client, auth_headers):
     r = await client.put(
@@ -272,6 +286,7 @@ async def test_update_settings_agents(client, auth_headers):
     assert set(body["default_agents"]) == {"security", "logic"}
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_test_llm_returns_booleans(client, auth_headers):
     r = await client.post("/api/settings/test-llm", headers=auth_headers)
@@ -287,12 +302,14 @@ async def test_test_llm_returns_booleans(client, auth_headers):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_dashboard_stats_requires_auth(client):
     r = await client.get("/api/dashboard/stats")
     assert r.status_code == 401
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_dashboard_stats_shape(client, auth_headers):
     r = await client.get("/api/dashboard/stats", headers=auth_headers)
@@ -303,6 +320,7 @@ async def test_dashboard_stats_shape(client, auth_headers):
         assert key in body, f"missing key: {key}"
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_dashboard_stats_isolated_per_user(client):
     """Two different users should see only their own totals."""
@@ -337,6 +355,7 @@ async def test_dashboard_stats_isolated_per_user(client):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_webhook_missing_signature_rejected(client):
     r = await client.post(
@@ -347,6 +366,7 @@ async def test_webhook_missing_signature_rejected(client):
     assert r.status_code == 401
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_webhook_bad_signature_rejected(client):
     r = await client.post(
@@ -361,6 +381,7 @@ async def test_webhook_bad_signature_rejected(client):
     assert r.status_code == 401
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_webhook_unsupported_action_ignored(client):
     """A valid signature with an unknown action returns 202 + 'ignored'."""
