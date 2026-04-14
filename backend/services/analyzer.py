@@ -148,11 +148,13 @@ async def _run_analysis_inner(session: AsyncSession, review_id: uuid.UUID) -> No
     ollama_enabled = False
     ollama_host: str | None = None
 
+    lm_preference = "auto"
     if user:
         api_key_claude = _try_decrypt_key(user.api_key_claude)
         api_key_gpt = _try_decrypt_key(user.api_key_gpt)
         ollama_enabled = user.ollama_enabled
         ollama_host = user.ollama_host
+        lm_preference = user.lm_preference or "auto"
 
     async def _on_progress(agent_name: str, status: str) -> None:
         await ws_manager.broadcast(
@@ -168,6 +170,7 @@ async def _run_analysis_inner(session: AsyncSession, review_id: uuid.UUID) -> No
         api_key_gpt=api_key_gpt,
         ollama_enabled=ollama_enabled,
         ollama_host=ollama_host,
+        llm_preference=lm_preference,
         on_progress=_on_progress,
     )
 

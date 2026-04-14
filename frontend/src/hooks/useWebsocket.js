@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 
-const WS_BASE_URL = 'ws://localhost:8000'
+const WS_BASE_URL = window.location.origin.replace(/^http/, 'ws')
 
 /**
  * @typedef {'pending'|'running'|'done'|'error'} AgentStatusValue
