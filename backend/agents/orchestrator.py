@@ -91,20 +91,26 @@ async def _call_llm(prompt: str, config: LLMConfig) -> tuple[str, int, int]:
 async def _run_agent(
     agent_name: str,
     chunks: list[CodeChunk],
-    config: LLMConfig,
+    llm_preference: str,
+    api_key_claude: str | None,
+    api_key_gpt: str | None,
+    ollama_enabled: bool,
+    ollama_host: str | None,
     on_progress: Callable[[str, str], Awaitable[None]] | None = None,
 ) -> tuple[list[dict], dict]:
     """Run a single named agent and return (findings, execution_meta).
 
-    Imports the agent module lazily to keep orchestrator imports clean.
-    Catches all errors so one failing agent never blocks the others.
-    Calls ``on_progress(agent_name, status)`` on start and completion so
-    callers can push real-time updates to WebSocket clients.
+    Selects the LLM config per agent so each agent gets the correct model
+    tier (e.g. style → Sonnet, security/logic/performance → Opus).
 
     Args:
         agent_name: One of ``security``, ``performance``, ``style``, ``logic``.
         chunks: Code chunks to analyse.
-        config: LLM configuration to use.
+        llm_preference: LLM provider preference (``auto`` / ``claude`` / ``gpt`` / ``local``).
+        api_key_claude: Decrypted Claude API key or None.
+        api_key_gpt: Decrypted GPT API key or None.
+        ollama_enabled: Whether Ollama is enabled.
+        ollama_host: Ollama base URL override.
         on_progress: Optional async callback ``(agent_name, status) → None``.
 
     Returns:
@@ -121,6 +127,36 @@ async def _run_agent(
             await on_progress(agent_name, "running")
         except Exception:
             pass  # Never let progress callbacks crash the agent
+
+    # Select LLM per agent so the correct model tier is used
+    # (e.g. style → Sonnet/low, security/logic/performance → Opus/high).
+    try:
+        config = await llm_router.select(
+            preference=llm_preference,
+            agent_name=agent_name,
+            api_key_claude=api_key_claude,
+            api_key_gpt=api_key_gpt,
+            ollama_enabled=ollama_enabled,
+            ollama_host=ollama_host,
+        )
+    except ValueError as exc:
+        error_message = str(exc)
+        logger.warning("No LLM for agent '%s': %s", agent_name, exc)
+        completed_at = datetime.now(timezone.utc)
+        if on_progress:
+            try:
+                await on_progress(agent_name, "error")
+            except Exception:
+                pass
+        return [], {
+            "status": "error",
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "tokens_input": 0,
+            "tokens_output": 0,
+            "findings_count": 0,
+            "error_message": error_message,
+        }
 
     try:
         # Dynamic import so adding new agents never requires touching this file.
@@ -224,41 +260,23 @@ async def run_graph(
         }
         return [], empty_meta
 
-    # Select LLM once for the whole graph run.
-    try:
-        config = await llm_router.select(
-            preference=llm_preference,
-            agent_name=agents[0],  # Use first agent's tier as baseline
-            api_key_claude=api_key_claude,
-            api_key_gpt=api_key_gpt,
-            ollama_enabled=ollama_enabled,
-            ollama_host=ollama_host,
-        )
-        logger.info(
-            "run_graph: using %s/%s for review %s",
-            config.provider,
-            config.model,
-            review_id,
-        )
-    except ValueError as exc:
-        logger.warning("No LLM available for review %s: %s", review_id, exc)
-        # Return graceful empty results rather than crashing the analysis.
-        empty_meta = {
-            a: {
-                "status": "error",
-                "started_at": datetime.now(timezone.utc),
-                "completed_at": datetime.now(timezone.utc),
-                "tokens_input": 0,
-                "tokens_output": 0,
-                "findings_count": 0,
-                "error_message": str(exc),
-            }
-            for a in agents
-        }
-        return [], empty_meta
+    logger.info("run_graph: starting %d agents for review %s", len(agents), review_id)
 
-    # Run all agents concurrently.
-    tasks = [_run_agent(agent_name, chunks, config, on_progress) for agent_name in agents]
+    # Run all agents concurrently. Each agent selects its own LLM config so
+    # the correct model tier is used (style → Sonnet, others → Opus).
+    tasks = [
+        _run_agent(
+            agent_name,
+            chunks,
+            llm_preference,
+            api_key_claude,
+            api_key_gpt,
+            ollama_enabled,
+            ollama_host,
+            on_progress,
+        )
+        for agent_name in agents
+    ]
     results = await asyncio.gather(*tasks)
 
     all_findings: list[dict] = []
