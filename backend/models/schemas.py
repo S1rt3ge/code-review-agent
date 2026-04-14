@@ -220,6 +220,7 @@ class SettingsResponse(BaseModel):
         default_factory=lambda: ["security", "performance", "style", "logic"],
     )
     lm_preference: str = "auto"
+    warnings: list[str] = Field(default_factory=list)
 
 
 class SettingsUpdate(BaseModel):

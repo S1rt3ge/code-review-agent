@@ -130,15 +130,19 @@ async def update_settings(
         try:
             current_user.api_key_claude = encrypt_value(payload.api_key_claude)
         except ValueError:
-            warnings.append("FERNET_KEY not configured; API key was not stored encrypted")
-            current_user.api_key_claude = payload.api_key_claude
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Encryption is not configured on this server (FERNET_KEY missing). API key was not saved.",
+            )
 
     if payload.api_key_gpt is not None:
         try:
             current_user.api_key_gpt = encrypt_value(payload.api_key_gpt)
         except ValueError:
-            warnings.append("FERNET_KEY not configured; API key was not stored encrypted")
-            current_user.api_key_gpt = payload.api_key_gpt
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Encryption is not configured on this server (FERNET_KEY missing). API key was not saved.",
+            )
 
     if payload.ollama_enabled is not None:
         current_user.ollama_enabled = payload.ollama_enabled
@@ -166,6 +170,7 @@ async def update_settings(
         ollama_host=merged.ollama_host or app_settings.ollama_host,
         default_agents=merged.default_agents or ["security", "performance", "style", "logic"],
         lm_preference=merged.lm_preference or "auto",
+        warnings=warnings,
     )
 
 
