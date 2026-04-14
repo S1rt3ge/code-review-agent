@@ -14,7 +14,7 @@ GitHub Webhook → FastAPI → LangGraph Orchestrator → [Security|Perf|Style|L
 
 ## Tech Stack
 **Backend:** Python 3.12, FastAPI, LangGraph, PostgreSQL, Pydantic
-**Frontend:** React 19, TypeScript, TailwindCSS, Zustand
+**Frontend:** React 19, JavaScript (JSDoc), TailwindCSS, Zustand
 **LLM:** Claude Opus 4.6 (primary), GPT-5.4 (fallback), Qwen2.5-Coder-32B (local via Ollama)
 **Infrastructure:** Docker, PostgreSQL, Redis (optional)
 
@@ -49,17 +49,24 @@ code-review-agent/
 ├── frontend/
 │   ├── src/
 │   │   ├── pages/
-│   │   │   ├── Dashboard.tsx
-│   │   │   ├── ReviewDetail.tsx
-│   │   │   └── Settings.tsx
+│   │   │   ├── Dashboard.jsx
+│   │   │   ├── ReviewDetail.jsx
+│   │   │   ├── Settings.jsx
+│   │   │   └── Login.jsx
 │   │   ├── components/
-│   │   │   ├── FindingsTable.tsx
-│   │   │   ├── AgentStatus.tsx
-│   │   │   └── LLMSelector.tsx
+│   │   │   ├── FindingsTable.jsx
+│   │   │   ├── AgentStatus.jsx
+│   │   │   ├── LLMSelector.jsx
+│   │   │   ├── Navbar.jsx
+│   │   │   ├── StatusBadge.jsx
+│   │   │   └── ProtectedRoute.jsx
 │   │   ├── hooks/
-│   │   │   ├── useWebsocket.ts
-│   │   │   └── useSettings.ts
-│   │   └── App.tsx
+│   │   │   ├── useApi.js
+│   │   │   ├── useWebsocket.js
+│   │   │   └── useSettings.js
+│   │   ├── store/
+│   │   │   └── index.js
+│   │   └── App.jsx
 │   └── package.json
 ├── supabase/
 │   ├── migrations/
