@@ -20,9 +20,11 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 
 from backend.agents.orchestrator import run_graph
+from backend.services.ws_manager import ws_manager
 from backend.models.db_models import AgentExecution, Finding, Repository, Review, User
 from backend.services.code_extractor import CodeChunk, extract_chunks
 from backend.services.github_api import GitHubApiClient, get_github_client
+from backend.services.pr_commenter import build_comment
 from backend.services.result_aggregator import aggregate
 from backend.utils.crypto import decrypt_value
 from backend.utils.database import async_session_factory
@@ -39,18 +41,6 @@ def _try_decrypt_key(ciphertext: str | None) -> str | None:
     except Exception:
         return None
 
-
-# Severity display order for PR comments (most important first).
-SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"]
-
-# Emoji per severity level.
-SEVERITY_EMOJI: dict[str, str] = {
-    "critical": "🔴",
-    "high": "🟠",
-    "medium": "🟡",
-    "low": "🔵",
-    "info": "⚪",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +154,12 @@ async def _run_analysis_inner(session: AsyncSession, review_id: uuid.UUID) -> No
         ollama_enabled = user.ollama_enabled
         ollama_host = user.ollama_host
 
+    async def _on_progress(agent_name: str, status: str) -> None:
+        await ws_manager.broadcast(
+            str(review_id),
+            {"agent_name": agent_name, "status": status},
+        )
+
     all_findings, agent_results = await run_graph(
         review_id=review_id,
         chunks=chunks,
@@ -172,6 +168,7 @@ async def _run_analysis_inner(session: AsyncSession, review_id: uuid.UUID) -> No
         api_key_gpt=api_key_gpt,
         ollama_enabled=ollama_enabled,
         ollama_host=ollama_host,
+        on_progress=_on_progress,
     )
 
     # ── 4b. Deduplicate and rank findings ─────────────────────────────────────
@@ -240,6 +237,7 @@ async def _run_analysis_inner(session: AsyncSession, review_id: uuid.UUID) -> No
             review=review,
             repository=repo_result,
             findings=all_findings,
+            agent_results=agent_results,
         )
 
 
@@ -255,6 +253,7 @@ async def _post_comment(
     review: Review,
     repository: Repository,
     findings: list[dict],
+    agent_results: dict[str, dict] | None = None,
 ) -> None:
     """Format findings as markdown and post (or update) a GitHub PR comment.
 
@@ -265,7 +264,13 @@ async def _post_comment(
         repository: Repository ORM object with owner/name/installation_id.
         findings: List of finding dicts from the orchestrator.
     """
-    body = _build_comment_body(findings)
+    body = build_comment(
+        findings=findings,
+        agent_results=agent_results,
+        estimated_cost=review.estimated_cost,
+        pr_title=review.github_pr_title,
+        head_sha=review.head_sha,
+    )
 
     try:
         if review.pr_comment_id:
@@ -298,58 +303,6 @@ async def _post_comment(
             exc_info=True,
         )
 
-
-def _build_comment_body(findings: list[dict]) -> str:
-    """Format a list of findings into a GitHub markdown PR comment.
-
-    Findings are grouped by severity (critical first) and then by file.
-
-    Args:
-        findings: List of finding dicts with at minimum:
-            ``severity``, ``file_path``, ``line_number``,
-            ``message``, ``agent_name``, ``finding_type``.
-
-    Returns:
-        Markdown string suitable for a GitHub PR comment body.
-    """
-    if not findings:
-        return "## Code Review\n\n✅ No issues found."
-
-    lines: list[str] = ["## Code Review\n"]
-
-    # Group by severity
-    by_severity: dict[str, list[dict]] = {}
-    for f in findings:
-        sev = f.get("severity", "info").lower()
-        by_severity.setdefault(sev, []).append(f)
-
-    for sev in SEVERITY_ORDER:
-        group = by_severity.get(sev, [])
-        if not group:
-            continue
-        emoji = SEVERITY_EMOJI.get(sev, "•")
-        lines.append(f"### {emoji} {sev.capitalize()} ({len(group)})\n")
-
-        for f in group:
-            file_path = f.get("file_path", "unknown")
-            line_no = f.get("line_number", 0)
-            agent = f.get("agent_name", "agent")
-            ftype = f.get("finding_type", "issue")
-            message = f.get("message", "")
-            suggestion = f.get("suggestion", "")
-            snippet = f.get("code_snippet", "")
-
-            lines.append(f"**`{file_path}:{line_no}`** [{agent}/{ftype}]")
-            lines.append(f"> {message}")
-            if suggestion:
-                lines.append(f"\n💡 {suggestion}")
-            if snippet:
-                lines.append(f"\n```\n{snippet}\n```")
-            lines.append("")
-
-    total = len(findings)
-    lines.append(f"\n---\n*{total} finding{'s' if total != 1 else ''} total*")
-    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
