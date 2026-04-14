@@ -66,17 +66,17 @@ async def get_settings(
         api_key_gpt_set=current_user.api_key_gpt is not None,
         ollama_enabled=current_user.ollama_enabled,
         ollama_host=current_user.ollama_host or app_settings.ollama_host,
-        default_agents=["security", "performance", "style", "logic"],
-        lm_preference="auto",
+        default_agents=current_user.default_agents or ["security", "performance", "style", "logic"],
+        lm_preference=current_user.lm_preference or "auto",
     )
 
 
-@router.put("", response_model=dict)
+@router.put("", response_model=SettingsResponse)
 async def update_settings(
     payload: SettingsUpdate,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-) -> dict[str, bool | list[str]]:
+) -> SettingsResponse:
     """Update user LLM settings and API keys.
 
     API keys are encrypted with Fernet before storage. Existing keys are
@@ -88,7 +88,7 @@ async def update_settings(
         session: Async database session.
 
     Returns:
-        Dict with ``updated`` flag and optional ``warnings`` list.
+        Full updated settings response.
 
     Raises:
         HTTPException 400: If agent names or LLM preference are invalid.
@@ -146,13 +146,27 @@ async def update_settings(
     if payload.ollama_host is not None:
         current_user.ollama_host = payload.ollama_host
 
+    if payload.default_agents is not None:
+        current_user.default_agents = payload.default_agents
+
+    if payload.lm_preference is not None:
+        current_user.lm_preference = payload.lm_preference
+
     # Re-attach to session (current_user came from a dependency session that
     # may be different from the route's session when both are injected).
     merged = await session.merge(current_user)
     await session.flush()
 
     logger.info("Settings updated for user %s", merged.email)
-    return {"updated": True, "warnings": warnings}
+    return SettingsResponse(
+        plan=merged.plan,
+        api_key_claude_set=merged.api_key_claude is not None,
+        api_key_gpt_set=merged.api_key_gpt is not None,
+        ollama_enabled=merged.ollama_enabled,
+        ollama_host=merged.ollama_host or app_settings.ollama_host,
+        default_agents=merged.default_agents or ["security", "performance", "style", "logic"],
+        lm_preference=merged.lm_preference or "auto",
+    )
 
 
 @router.post("/test-llm", response_model=SettingsTestResponse)

@@ -25,7 +25,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.utils.database import Base
@@ -49,6 +49,10 @@ class User(Base):
     api_key_gpt: Mapped[str | None] = mapped_column(Text, nullable=True)
     ollama_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     ollama_host: Mapped[str | None] = mapped_column(Text, nullable=True)
+    default_agents: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list
+    )
+    lm_preference: Mapped[str] = mapped_column(Text, nullable=False, default="auto")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
