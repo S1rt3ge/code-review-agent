@@ -21,7 +21,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.models.db_models import Finding, Repository, Review
+from backend.models.db_models import Finding, Repository, Review, User
 from backend.models.schemas import (
     AnalyzeResponse,
     CreateReviewRequest,
@@ -33,6 +33,7 @@ from backend.models.schemas import (
 )
 from backend.services.analyzer import _build_comment_body, run_analysis
 from backend.services.github_api import get_github_client
+from backend.utils.auth import get_current_user
 from backend.utils.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -46,9 +47,6 @@ router = APIRouter(prefix="/reviews", tags=["reviews"])
 MAX_PAGE_LIMIT = 100
 DEFAULT_PAGE_LIMIT = 20
 
-# TODO(phase-1.2): Replace with real user from JWT auth dependency.
-PLACEHOLDER_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
-
 
 # ---------------------------------------------------------------------------
 # Endpoints
@@ -58,6 +56,7 @@ PLACEHOLDER_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
 @router.get("", response_model=ReviewListResponse)
 async def list_reviews(
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     repo_id: uuid.UUID | None = Query(default=None, description="Filter by repository"),
     review_status: str | None = Query(
         default=None,
@@ -79,9 +78,9 @@ async def list_reviews(
     Returns:
         Paginated list of review items with total count.
     """
-    # Build base query
-    stmt = select(Review).order_by(Review.created_at.desc())
-    count_stmt = select(func.count(Review.id))
+    # Build base query — always scoped to the authenticated user
+    stmt = select(Review).where(Review.user_id == current_user.id).order_by(Review.created_at.desc())
+    count_stmt = select(func.count(Review.id)).where(Review.user_id == current_user.id)
 
     # Apply filters
     if repo_id is not None:
@@ -113,6 +112,7 @@ async def list_reviews(
 async def create_review(
     payload: CreateReviewRequest,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> ReviewResponse:
     """Create a review manually (not via webhook).
 
@@ -125,7 +125,7 @@ async def create_review(
     """
     review = Review(
         id=uuid.uuid4(),
-        user_id=PLACEHOLDER_USER_ID,
+        user_id=current_user.id,
         repo_id=payload.repo_id,
         github_pr_number=payload.github_pr_number,
         status="pending",
@@ -143,6 +143,7 @@ async def create_review(
 async def get_review(
     review_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> ReviewResponse:
     """Get a single review with its findings and agent executions.
 
@@ -167,7 +168,7 @@ async def get_review(
     result = await session.execute(stmt)
     review = result.scalar_one_or_none()
 
-    if review is None:
+    if review is None or review.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Review not found",
@@ -184,6 +185,7 @@ async def analyze_review(
         description="Comma-separated agent names to override defaults",
     ),
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> AnalyzeResponse:
     """Trigger analysis for a pending review.
 
@@ -204,7 +206,7 @@ async def analyze_review(
     """
     review = await session.get(Review, review_id)
 
-    if review is None:
+    if review is None or review.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Review not found",
@@ -236,6 +238,7 @@ async def post_comment(
     review_id: uuid.UUID,
     payload: PostCommentRequest,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> PostCommentResponse:
     """Post review findings as a GitHub PR comment.
 
@@ -259,7 +262,7 @@ async def post_comment(
     result = await session.execute(stmt)
     review = result.scalar_one_or_none()
 
-    if review is None:
+    if review is None or review.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Review not found",
