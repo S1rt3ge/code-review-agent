@@ -168,7 +168,7 @@ async def get_review(
     """
     stmt = (
         select(Review)
-        .where(Review.id == review_id)
+        .where(Review.id == review_id, Review.user_id == current_user.id)
         .options(
             selectinload(Review.findings),
             selectinload(Review.agent_executions),
@@ -177,7 +177,7 @@ async def get_review(
     result = await session.execute(stmt)
     review = result.scalar_one_or_none()
 
-    if review is None or review.user_id != current_user.id:
+    if review is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Review not found",
