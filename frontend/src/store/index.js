@@ -1,6 +1,49 @@
 import { create } from 'zustand'
 
 /**
+ * @typedef {Object} AuthUser
+ * @property {string} id
+ * @property {string} email
+ * @property {string} plan
+ */
+
+/**
+ * @typedef {Object} AuthState
+ * @property {string|null} token - JWT access token (also persisted in localStorage)
+ * @property {AuthUser|null} user - Authenticated user info
+ * @property {function(string, AuthUser): void} setAuth - Store token + user after login
+ * @property {function(): void} clearAuth - Remove token + user on logout
+ */
+
+/**
+ * Zustand store for authentication state.
+ * Initialises token from localStorage so the session survives page reloads.
+ * @type {import('zustand').UseBoundStore<import('zustand').StoreApi<AuthState>>}
+ */
+export const useAuthStore = create(set => ({
+  token: localStorage.getItem('token'),
+  user: null,
+
+  /**
+   * Persist the token to localStorage and store both token and user.
+   * @param {string} token
+   * @param {AuthUser} user
+   */
+  setAuth: (token, user) => {
+    localStorage.setItem('token', token)
+    set({ token, user })
+  },
+
+  /**
+   * Remove the token from localStorage and clear auth state.
+   */
+  clearAuth: () => {
+    localStorage.removeItem('token')
+    set({ token: null, user: null })
+  },
+}))
+
+/**
  * @typedef {Object} SettingsState
  * @property {string} apiKeyClaude - Anthropic Claude API key
  * @property {string} apiKeyGpt - OpenAI GPT API key
