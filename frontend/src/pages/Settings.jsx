@@ -220,7 +220,12 @@ export function Settings() {
 
       {/* API Keys */}
       <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 space-y-4">
-        <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200">API Keys</h2>
+        <div>
+          <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200">API Keys</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            Keys are encrypted at rest. You only need one provider — Claude is recommended for best accuracy.
+          </p>
+        </div>
         <ApiKeyInput
           id="api-key-claude"
           label="Anthropic Claude"
@@ -229,6 +234,13 @@ export function Settings() {
           placeholder="sk-ant-..."
           isSet={settings?.api_key_claude_set}
         />
+        <p className="text-xs text-gray-400 dark:text-gray-500 -mt-2">
+          Get your key at{' '}
+          <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">
+            console.anthropic.com
+          </a>
+          . Free tier available.
+        </p>
         <ApiKeyInput
           id="api-key-gpt"
           label="OpenAI GPT"
@@ -237,6 +249,13 @@ export function Settings() {
           placeholder="sk-..."
           isSet={settings?.api_key_gpt_set}
         />
+        <p className="text-xs text-gray-400 dark:text-gray-500 -mt-2">
+          Get your key at{' '}
+          <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">
+            platform.openai.com
+          </a>
+          . Used as fallback if Claude is unavailable.
+        </p>
       </section>
 
       {/* LLM Provider preference */}
@@ -248,7 +267,12 @@ export function Settings() {
       {/* Ollama */}
       <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200">Local Ollama</h2>
+          <div>
+            <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200">Local Ollama</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Run models locally — no API costs. Requires Ollama to be publicly accessible.
+            </p>
+          </div>
           <button
             type="button"
             role="switch"
@@ -265,19 +289,91 @@ export function Settings() {
             />
           </button>
         </div>
+
         {ollamaEnabled && (
-          <div>
-            <label htmlFor="ollama-host" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Ollama Host URL
-            </label>
-            <input
-              id="ollama-host"
-              type="text"
-              value={ollamaHost}
-              onChange={e => setOllamaHost(e.target.value)}
-              placeholder="http://localhost:11434"
-              className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="ollama-host" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Ollama Host URL
+              </label>
+              <input
+                id="ollama-host"
+                type="text"
+                value={ollamaHost}
+                onChange={e => setOllamaHost(e.target.value)}
+                placeholder="http://localhost:11434"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 p-4 space-y-3">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                Important: Ollama must be reachable from this server
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                If this app is hosted in the cloud, <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">localhost:11434</code> won't work — the server can't reach your local machine directly.
+                You need to expose Ollama via a public URL.
+              </p>
+              <div>
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1.5">
+                  Option A — Cloudflare Tunnel (free, permanent URL, recommended):
+                </p>
+                <ol className="text-xs text-amber-700 dark:text-amber-400 space-y-1 ml-3 list-decimal">
+                  <li>
+                    Install:{' '}
+                    <a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/" target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+                      download cloudflared
+                    </a>
+                  </li>
+                  <li>
+                    Run:{' '}
+                    <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded font-mono">
+                      OLLAMA_ORIGINS=* ollama serve
+                    </code>
+                  </li>
+                  <li>
+                    Expose:{' '}
+                    <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded font-mono">
+                      cloudflared tunnel --url http://localhost:11434
+                    </code>
+                  </li>
+                  <li>Copy the <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">https://....trycloudflare.com</code> URL and paste it above</li>
+                </ol>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1.5">
+                  Option B — ngrok (easy, URL changes on restart):
+                </p>
+                <ol className="text-xs text-amber-700 dark:text-amber-400 space-y-1 ml-3 list-decimal">
+                  <li>Install ngrok from <a href="https://ngrok.com/download" target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">ngrok.com</a></li>
+                  <li><code className="bg-amber-100 dark:bg-amber-900 px-1 rounded font-mono">OLLAMA_ORIGINS=* ollama serve</code></li>
+                  <li><code className="bg-amber-100 dark:bg-amber-900 px-1 rounded font-mono">ngrok http 11434</code></li>
+                  <li>Copy the <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">https://....ngrok-free.app</code> URL and paste it above</li>
+                </ol>
+              </div>
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                <strong>Running locally?</strong> If you cloned this repo and run the backend on your own machine, <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">http://localhost:11434</code> works as-is.
+              </p>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Recommended models:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {[
+                  { name: 'qwen2.5-coder:3b', size: '1.9 GB', note: 'Fast, low VRAM' },
+                  { name: 'qwen2.5-coder:7b', size: '4.7 GB', note: 'Balanced' },
+                  { name: 'qwen2.5-coder:32b', size: '20 GB', note: 'Best quality' },
+                ].map(m => (
+                  <div key={m.name} className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
+                    <code className="text-xs font-mono text-gray-800 dark:text-gray-200 block">{m.name}</code>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{m.size} · {m.note}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                Pull with: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded font-mono">ollama pull qwen2.5-coder:7b</code>
+              </p>
+            </div>
           </div>
         )}
       </section>

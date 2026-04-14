@@ -184,20 +184,59 @@ export function Dashboard() {
           Failed to load reviews: {reviewsError}
         </div>
       ) : reviews.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center">
-          <svg
-            className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4"
-            viewBox="0 0 48 48"
-            fill="none"
-            aria-hidden="true"
-          >
-            <rect x="8" y="8" width="32" height="32" rx="4" stroke="currentColor" strokeWidth="2" />
-            <path d="M16 20h16M16 28h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-          <p className="text-base font-medium text-gray-700 dark:text-gray-300">No reviews yet</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Set up your GitHub webhook to start receiving code reviews.
-          </p>
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="px-6 pt-8 pb-4 text-center border-b border-gray-100 dark:border-gray-700">
+            <svg className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <rect x="8" y="8" width="32" height="32" rx="4" stroke="currentColor" strokeWidth="2" />
+              <path d="M16 20h16M16 28h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <p className="text-base font-semibold text-gray-800 dark:text-gray-200">No reviews yet</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Follow the steps below to get your first automated code review.</p>
+          </div>
+
+          <div className="divide-y divide-gray-100 dark:divide-gray-700">
+            {/* Step 1 */}
+            <div className="px-6 py-5 flex gap-4">
+              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">1</div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Configure an LLM provider</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                  Go to <Link to="/settings" className="text-blue-600 dark:text-blue-400 hover:underline">Settings</Link> and add an API key for Claude or GPT, or set up a local Ollama instance.
+                </p>
+              </div>
+            </div>
+
+            {/* Step 2 */}
+            <div className="px-6 py-5 flex gap-4">
+              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">2</div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Add a GitHub Webhook</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 mb-2">
+                  In your GitHub repository go to <strong className="text-gray-700 dark:text-gray-300">Settings → Webhooks → Add webhook</strong> and fill in:
+                </p>
+                <ul className="text-sm text-gray-500 dark:text-gray-400 space-y-1 ml-3 list-disc">
+                  <li><span className="font-medium text-gray-700 dark:text-gray-300">Payload URL:</span>{' '}
+                    <code className="text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded font-mono break-all">
+                      {window.location.origin}/api/github/webhook
+                    </code>
+                  </li>
+                  <li><span className="font-medium text-gray-700 dark:text-gray-300">Content type:</span> <code className="text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">application/json</code></li>
+                  <li><span className="font-medium text-gray-700 dark:text-gray-300">Events:</span> select <em>Pull requests</em></li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div className="px-6 py-5 flex gap-4">
+              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">3</div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Open a Pull Request</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                  Create or update a PR in the connected repository. The agent will automatically analyze it and post a comment with findings.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
