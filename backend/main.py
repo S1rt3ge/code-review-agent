@@ -11,6 +11,7 @@ Functions:
     shutdown: Dispose of the async engine on shutdown.
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
@@ -43,8 +44,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     logger.info(f"Starting application (env={settings.app_env})")
     try:
-        async with async_session_factory() as session:
-            await session.execute(text("SELECT 1"))
+        async with asyncio.timeout(10):
+            async with async_session_factory() as session:
+                await session.execute(text("SELECT 1"))
         logger.info("Database connection verified")
     except Exception as e:
         logger.warning(f"Database not reachable at startup: {e}")
@@ -102,9 +104,10 @@ async def health_check() -> HealthResponse:
     """
     db_status = "disconnected"
     try:
-        async with async_session_factory() as session:
-            await session.execute(text("SELECT 1"))
-            db_status = "connected"
+        async with asyncio.timeout(5):
+            async with async_session_factory() as session:
+                await session.execute(text("SELECT 1"))
+                db_status = "connected"
     except Exception as e:
         logger.warning(f"Health check DB probe failed: {e}")
 
