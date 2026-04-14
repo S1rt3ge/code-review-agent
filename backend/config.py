@@ -39,6 +39,18 @@ class Settings(BaseSettings):
         alias="DATABASE_URL",
     )
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def fix_database_url(cls, v: str) -> str:
+        """Ensure the async psycopg3 driver prefix is used.
+
+        Railway (and many PaaS providers) inject ``postgresql://`` URLs.
+        SQLAlchemy's async engine requires ``postgresql+psycopg://``.
+        """
+        if isinstance(v, str) and v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+psycopg://", 1)
+        return v
+
     # LLM APIs
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
