@@ -5,8 +5,12 @@ Classes:
         and provides typed access to all configuration values.
 """
 
+import logging
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -84,3 +88,17 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+_DEFAULT_JWT_SECRET = "change-me-in-production"
+if settings.jwt_secret == _DEFAULT_JWT_SECRET and settings.app_env != "development":
+    _logger.critical(
+        "JWT_SECRET is set to the default value '%s'. "
+        "Anyone can forge valid tokens. Set a strong JWT_SECRET env var immediately.",
+        _DEFAULT_JWT_SECRET,
+    )
+
+if not settings.github_webhook_secret:
+    _logger.warning(
+        "GITHUB_WEBHOOK_SECRET is not set. "
+        "All incoming webhook requests will be rejected with 401."
+    )
