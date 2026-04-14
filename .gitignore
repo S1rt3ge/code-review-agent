@@ -51,3 +51,8 @@ Thumbs.db
 *.pem
 *.key
 *.p12
+
+# Dev docs (keep locally, not in repo)
+*.md
+!README.md
+.claude/
