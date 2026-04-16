@@ -11,7 +11,6 @@ Functions:
     _handle_installation_event: Process installation lifecycle events.
 """
 
-import asyncio
 import json
 import logging
 import uuid
@@ -23,15 +22,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import settings
 from backend.models.db_models import Repository, Review
 from backend.models.schemas import WebhookPayload
-from backend.services.analyzer import run_analysis
+from backend.services.analysis_queue import enqueue_analysis
 from backend.utils.database import get_db
 from backend.utils.webhooks import verify_github_signature
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/github", tags=["github"])
-
-_background_tasks: set[asyncio.Task] = set()
 
 SUPPORTED_ACTIONS = {"opened", "synchronize"}
 
@@ -105,13 +102,51 @@ async def github_webhook(
         Repository.enabled.is_(True),
     )
     result = await session.execute(stmt)
-    repository = result.scalar_one_or_none()
+    repositories = result.scalars().all()
 
-    if repository is None:
+    if not repositories:
         logger.warning(f"Repository not configured: {repo_owner}/{repo_name}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository {repo_owner}/{repo_name} is not configured",
+        )
+
+    repository = repositories[0]
+    installation_id: int | None = None
+    if payload.installation and isinstance(payload.installation, dict):
+        raw_installation_id = payload.installation.get("id")
+        if isinstance(raw_installation_id, int):
+            installation_id = raw_installation_id
+
+    if installation_id is not None:
+        exact_matches = [
+            repo
+            for repo in repositories
+            if repo.github_installation_id == installation_id
+        ]
+        if exact_matches:
+            repository = exact_matches[0]
+            if len(exact_matches) > 1:
+                logger.warning(
+                    "Multiple repository rows matched owner/name/install id %s/%s/%s; "
+                    "using first match",
+                    repo_owner,
+                    repo_name,
+                    installation_id,
+                )
+        elif len(repositories) > 1:
+            logger.warning(
+                "Multiple repository rows matched owner/name %s/%s with no install-id "
+                "match for %s; using first match",
+                repo_owner,
+                repo_name,
+                installation_id,
+            )
+    elif len(repositories) > 1:
+        logger.warning(
+            "Multiple repository rows matched owner/name %s/%s; using first match",
+            repo_owner,
+            repo_name,
         )
 
     # Check for duplicate review (same PR, same head SHA, already running)
@@ -152,10 +187,7 @@ async def github_webhook(
     )
 
     # Kick off analysis in the background; response returns immediately.
-    # Keep a strong reference so the GC doesn't destroy the task mid-execution.
-    task = asyncio.create_task(run_analysis(review.id))
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    await enqueue_analysis(review.id)
 
     return {"review_id": str(review.id), "status": "pending"}
 
@@ -219,13 +251,9 @@ async def _handle_installation_event(
             if repo is not None:
                 repo.github_installation_id = installation_id
                 repo.enabled = True
-                logger.info(
-                    f"Updated installation_id={installation_id} on {full_name}"
-                )
+                logger.info(f"Updated installation_id={installation_id} on {full_name}")
             else:
-                logger.info(
-                    f"Skipping {full_name}: not registered by any user"
-                )
+                logger.info(f"Skipping {full_name}: not registered by any user")
 
         # Disable removed repositories
         for repo_info in repos_to_disable:
@@ -243,7 +271,9 @@ async def _handle_installation_event(
 
             if repo is not None:
                 repo.enabled = False
-                logger.info(f"Disabled repository {full_name} (removed from installation)")
+                logger.info(
+                    f"Disabled repository {full_name} (removed from installation)"
+                )
 
         await session.flush()
         logger.info(

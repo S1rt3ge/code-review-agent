@@ -4,7 +4,6 @@ Tests cover successful encryption and decryption, key mismatch errors,
 empty strings, and long values.
 """
 
-import os
 from unittest.mock import patch
 
 import pytest
@@ -134,6 +133,7 @@ class TestFernetKeyMissing:
             mock_settings.fernet_key = None
 
             import backend.utils.crypto as mod
+
             mod._fernet = None
 
             with pytest.raises(ValueError, match="FERNET_KEY"):
@@ -145,6 +145,7 @@ class TestFernetKeyMissing:
             mock_settings.fernet_key = None
 
             import backend.utils.crypto as mod
+
             mod._fernet = None
 
             with pytest.raises(ValueError, match="FERNET_KEY"):

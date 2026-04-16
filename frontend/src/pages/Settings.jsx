@@ -220,6 +220,12 @@ export function Settings() {
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           Configure LLM providers, API keys, and default agents.
         </p>
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          Didn&apos;t verify your email yet?{' '}
+          <a href="/resend-verification" className="text-blue-600 dark:text-blue-400 hover:underline">
+            Resend verification link
+          </a>
+        </p>
       </div>
 
       {/* API Keys */}

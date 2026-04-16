@@ -44,6 +44,26 @@ class User(Base):
     email: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     username: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     hashed_password: Mapped[str | None] = mapped_column(Text, nullable=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    password_reset_token_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    password_reset_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    password_reset_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    email_verification_token_hash: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    email_verification_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    email_verification_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     plan: Mapped[str] = mapped_column(Text, nullable=False, default="free")
     api_key_claude: Mapped[str | None] = mapped_column(Text, nullable=True)
     api_key_gpt: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -189,6 +209,62 @@ class Review(Base):
         back_populates="review",
         cascade="all, delete-orphan",
     )
+    analysis_jobs: Mapped[list["AnalysisJob"]] = relationship(
+        back_populates="review",
+        cascade="all, delete-orphan",
+    )
+
+
+class AnalysisJob(Base):
+    """Durable background job record for running review analysis."""
+
+    __tablename__ = "analysis_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    review_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("reviews.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_run_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    last_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    locked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    locked_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    review: Mapped["Review"] = relationship(back_populates="analysis_jobs")
 
 
 class Finding(Base):
@@ -278,7 +354,9 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(Text, nullable=False)
     resource_type: Mapped[str] = mapped_column(Text, nullable=False)
     resource_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    event_metadata: Mapped[Any | None] = mapped_column(JSONB, nullable=True, name="metadata")
+    event_metadata: Mapped[Any | None] = mapped_column(
+        JSONB, nullable=True, name="metadata"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

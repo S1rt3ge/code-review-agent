@@ -16,7 +16,6 @@ import pytest
 
 from backend.services.github_api import (
     GitHubApiClient,
-    PullRequestFile,
     _CachedToken,
     _normalize_private_key,
     get_github_client,
@@ -57,7 +56,9 @@ def client():
 async def test_get_installation_token_uses_cache(client):
     """Second call must not make an HTTP request when token is fresh."""
     future_expiry = time.time() + 7200  # 2 hours from now
-    client._token_cache[42] = _CachedToken(token="cached-token", expires_at=future_expiry)
+    client._token_cache[42] = _CachedToken(
+        token="cached-token", expires_at=future_expiry
+    )
 
     with patch.object(client, "_make_app_jwt", return_value="jwt"):
         token = await client._get_installation_token(42)
@@ -115,7 +116,9 @@ async def test_get_pr_files_single_page(client):
     mock_http.get = AsyncMock(return_value=mock_resp)
 
     with patch("backend.services.github_api.httpx.AsyncClient", return_value=mock_http):
-        with patch.object(client, "_get_installation_token", AsyncMock(return_value="tok")):
+        with patch.object(
+            client, "_get_installation_token", AsyncMock(return_value="tok")
+        ):
             files = await client.get_pr_files("owner", "repo", 1, 42)
 
     assert len(files) == 1
@@ -147,7 +150,9 @@ async def test_get_pr_files_paginates_when_full_page(client):
     mock_http.get = AsyncMock(side_effect=[mock_resp1, mock_resp2])
 
     with patch("backend.services.github_api.httpx.AsyncClient", return_value=mock_http):
-        with patch.object(client, "_get_installation_token", AsyncMock(return_value="tok")):
+        with patch.object(
+            client, "_get_installation_token", AsyncMock(return_value="tok")
+        ):
             files = await client.get_pr_files("owner", "repo", 7, 42)
 
     assert len(files) == 100
@@ -170,7 +175,9 @@ async def test_get_pr_files_missing_patch_becomes_none(client):
     mock_http.get = AsyncMock(return_value=mock_resp)
 
     with patch("backend.services.github_api.httpx.AsyncClient", return_value=mock_http):
-        with patch.object(client, "_get_installation_token", AsyncMock(return_value="tok")):
+        with patch.object(
+            client, "_get_installation_token", AsyncMock(return_value="tok")
+        ):
             files = await client.get_pr_files("owner", "repo", 2, 42)
 
     assert files[0].patch is None
@@ -193,7 +200,9 @@ async def test_post_pr_comment_returns_id_and_url(client):
     mock_http.post = AsyncMock(return_value=mock_resp)
 
     with patch("backend.services.github_api.httpx.AsyncClient", return_value=mock_http):
-        with patch.object(client, "_get_installation_token", AsyncMock(return_value="tok")):
+        with patch.object(
+            client, "_get_installation_token", AsyncMock(return_value="tok")
+        ):
             result = await client.post_pr_comment("owner", "repo", 1, "body text", 42)
 
     assert result == {"id": 999, "url": "https://github.com/c/999"}
@@ -215,7 +224,9 @@ async def test_update_pr_comment_sends_patch(client):
     mock_http.patch = AsyncMock(return_value=mock_resp)
 
     with patch("backend.services.github_api.httpx.AsyncClient", return_value=mock_http):
-        with patch.object(client, "_get_installation_token", AsyncMock(return_value="tok")):
+        with patch.object(
+            client, "_get_installation_token", AsyncMock(return_value="tok")
+        ):
             await client.update_pr_comment("owner", "repo", 777, "new body", 42)
 
     mock_http.patch.assert_called_once()

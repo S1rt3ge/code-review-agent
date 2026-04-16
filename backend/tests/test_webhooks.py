@@ -7,14 +7,13 @@ and malformed input.
 import hashlib
 import hmac
 
-import pytest
-
 from backend.utils.webhooks import verify_github_signature
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_signature(body: bytes, secret: str) -> str:
     """Compute a valid GitHub-style HMAC-SHA256 signature."""
@@ -89,9 +88,7 @@ class TestVerifyGithubSignature:
         """Signature without 'sha256=' prefix should fail."""
         body = b'{"data": "test"}'
         secret = "secret"
-        raw_digest = hmac.new(
-            secret.encode("utf-8"), body, hashlib.sha256
-        ).hexdigest()
+        raw_digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
 
         # Missing the sha256= prefix
         assert verify_github_signature(body, raw_digest, secret) is False

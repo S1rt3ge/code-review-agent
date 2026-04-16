@@ -8,8 +8,6 @@ Covers:
     extract_chunks: filtering (removed, no patch, unsupported extension)
 """
 
-import pytest
-
 from backend.services.code_extractor import (
     CodeChunk,
     _is_supported,

@@ -124,6 +124,11 @@ function LoginForm({ onSuccess }) {
       {error && (
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       )}
+      <div className="text-right">
+        <a href="/forgot-password" className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+          Forgot password?
+        </a>
+      </div>
       <button
         type="submit"
         disabled={loading}
@@ -136,21 +141,22 @@ function LoginForm({ onSuccess }) {
 }
 
 /**
- * Register form. POSTs to /auth/register then auto-logs in.
- * @param {{ onSuccess: () => void }} props
+ * Register form. Creates account and prompts for email verification.
+ * @param {{ onRegistered: () => void }} props
  * @returns {React.ReactElement}
  */
-function RegisterForm({ onSuccess }) {
+function RegisterForm({ onRegistered }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
+  const [success, setSuccess] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
-  const setAuth = useAuthStore(s => s.setAuth)
 
   const handleSubmit = useCallback(async e => {
     e.preventDefault()
     setError(null)
+    setSuccess(null)
     if (password !== confirm) {
       setError('Passwords do not match')
       return
@@ -162,30 +168,15 @@ function RegisterForm({ onSuccess }) {
     setLoading(true)
     try {
       await publicPost('/auth/register', { email, password })
-
-      // Auto-login after successful registration
-      const res = await fetch(`${API_BASE}/auth/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ username: email, password }),
-      })
-      if (!res.ok) throw new Error('Registration succeeded but login failed')
-      const data = await res.json()
-      const token = data.access_token
-
-      const meRes = await fetch(`${API_BASE}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const user = meRes.ok ? await meRes.json() : { id: '', email, plan: 'free' }
-
-      setAuth(token, user)
-      onSuccess()
+      setSuccess('Account created. Check your email for a verification link before signing in.')
+      setPassword('')
+      setConfirm('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed')
     } finally {
       setLoading(false)
     }
-  }, [email, password, confirm, setAuth, onSuccess])
+  }, [email, password, confirm])
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -218,6 +209,21 @@ function RegisterForm({ onSuccess }) {
       />
       {error && (
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+      )}
+      {success && (
+        <p className="text-sm text-green-700 dark:text-green-400">{success}</p>
+      )}
+      <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-900 rounded-md px-3 py-2">
+        After registration, check your email to verify your account.
+      </p>
+      {success && (
+        <button
+          type="button"
+          onClick={onRegistered}
+          className="w-full py-2 px-4 text-sm font-medium rounded-lg border border-blue-300 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+        >
+          Go to sign in
+        </button>
       )}
       <button
         type="submit"
@@ -281,8 +287,7 @@ export function Login() {
           <div className="p-6">
             {tab === 'login'
               ? <LoginForm onSuccess={handleSuccess} />
-              : <RegisterForm onSuccess={handleSuccess} />
-            }
+              : <RegisterForm onRegistered={() => setTab('login')} />}
           </div>
         </div>
       </div>

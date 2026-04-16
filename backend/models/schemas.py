@@ -28,7 +28,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +61,37 @@ class TokenResponse(BaseModel):
     username: str
 
 
+class PasswordResetRequest(BaseModel):
+    """Request password reset for an account email."""
+
+    email: str
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    """Confirm password reset with token and new password."""
+
+    token: str
+    new_password: str
+
+
+class EmailVerificationRequest(BaseModel):
+    """Request email verification email."""
+
+    email: str
+
+
+class EmailVerificationConfirmRequest(BaseModel):
+    """Confirm account email verification token."""
+
+    token: str
+
+
+class MessageResponse(BaseModel):
+    """Simple API response with a message."""
+
+    message: str
+
+
 # ---------------------------------------------------------------------------
 # User
 # ---------------------------------------------------------------------------
@@ -81,6 +112,8 @@ class UserResponse(BaseModel):
     email: str
     username: str
     plan: str
+    email_verified: bool
+    email_verified_at: datetime | None = None
     ollama_enabled: bool
     ollama_host: str | None
     created_at: datetime

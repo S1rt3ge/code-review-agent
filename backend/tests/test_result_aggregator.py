@@ -5,8 +5,6 @@ Covers:
     group_by_file: grouping correctness
 """
 
-import pytest
-
 from backend.services.result_aggregator import aggregate, group_by_file
 
 
@@ -15,7 +13,14 @@ from backend.services.result_aggregator import aggregate, group_by_file
 # ---------------------------------------------------------------------------
 
 
-def _f(agent: str, ftype: str, severity: str, file: str = "app.py", line: int = 10, msg: str = "") -> dict:
+def _f(
+    agent: str,
+    ftype: str,
+    severity: str,
+    file: str = "app.py",
+    line: int = 10,
+    msg: str = "",
+) -> dict:
     return {
         "agent_name": agent,
         "finding_type": ftype,
@@ -64,7 +69,13 @@ def test_aggregate_sorts_by_severity():
 
 def test_aggregate_exact_duplicate_marked():
     """Same file, same line, same type from two agents → second is duplicate."""
-    f1 = _f("security", "sql_injection", "critical", line=10, msg="SQL injection via f-string")
+    f1 = _f(
+        "security",
+        "sql_injection",
+        "critical",
+        line=10,
+        msg="SQL injection via f-string",
+    )
     f2 = _f("logic", "sql_injection", "high", line=10, msg="SQL injection via f-string")
     result = aggregate([f1, f2])
 
@@ -101,18 +112,40 @@ def test_aggregate_far_apart_lines_not_duplicate():
 
 def test_aggregate_similar_message_deduplicated():
     """Very similar messages, same file/line → duplicate regardless of type."""
-    f1 = _f("security", "injection", "high", line=5,
-             msg="User input passed directly to SQL query without escaping")
-    f2 = _f("logic", "unsafe_query", "medium", line=5,
-             msg="User input passed directly to SQL query without sanitisation")
+    f1 = _f(
+        "security",
+        "injection",
+        "high",
+        line=5,
+        msg="User input passed directly to SQL query without escaping",
+    )
+    f2 = _f(
+        "logic",
+        "unsafe_query",
+        "medium",
+        line=5,
+        msg="User input passed directly to SQL query without sanitisation",
+    )
     result = aggregate([f1, f2])
     dup_count = sum(1 for r in result if r["is_duplicate"])
     assert dup_count == 1
 
 
 def test_aggregate_different_messages_same_type_different_lines_kept():
-    f1 = _f("security", "missing_auth", "high", line=10, msg="Missing auth check on admin endpoint")
-    f2 = _f("security", "missing_auth", "high", line=50, msg="Missing auth check on delete endpoint")
+    f1 = _f(
+        "security",
+        "missing_auth",
+        "high",
+        line=10,
+        msg="Missing auth check on admin endpoint",
+    )
+    f2 = _f(
+        "security",
+        "missing_auth",
+        "high",
+        line=50,
+        msg="Missing auth check on delete endpoint",
+    )
     result = aggregate([f1, f2])
     assert all(not r["is_duplicate"] for r in result)
 

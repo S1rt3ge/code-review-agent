@@ -12,8 +12,6 @@ Covers:
 
 from decimal import Decimal
 
-import pytest
-
 from backend.services.pr_commenter import build_comment
 
 
@@ -46,7 +44,12 @@ def _finding(
     }
 
 
-def _agent_result(status: str = "done", findings_count: int = 1, tokens_in: int = 100, tokens_out: int = 50) -> dict:
+def _agent_result(
+    status: str = "done",
+    findings_count: int = 1,
+    tokens_in: int = 100,
+    tokens_out: int = 50,
+) -> dict:
     return {
         "status": status,
         "findings_count": findings_count,
@@ -97,7 +100,9 @@ def test_no_head_sha_omitted():
 
 
 def test_single_finding_appears():
-    f = _finding(severity="high", message="SQL injection risk", file_path="db.py", line_number=10)
+    f = _finding(
+        severity="high", message="SQL injection risk", file_path="db.py", line_number=10
+    )
     body = build_comment([f])
     assert "db.py:10" in body
     assert "SQL injection risk" in body
@@ -137,7 +142,10 @@ def test_severity_order_critical_before_info():
 
 
 def test_all_severity_levels_rendered():
-    findings = [_finding(severity=s, message=f"{s} msg") for s in ["critical", "high", "medium", "low", "info"]]
+    findings = [
+        _finding(severity=s, message=f"{s} msg")
+        for s in ["critical", "high", "medium", "low", "info"]
+    ]
     body = build_comment(findings)
     for sev in ["Critical", "High", "Medium", "Low", "Info"]:
         assert sev in body

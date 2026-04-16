@@ -31,6 +31,7 @@ describe('Login page', () => {
     expect(screen.getByLabelText('Email')).toBeInTheDocument()
     expect(screen.getByLabelText('Password')).toBeInTheDocument()
     expect(screen.queryByLabelText('Confirm Password')).not.toBeInTheDocument()
+    expect(screen.getByText('Forgot password?')).toBeInTheDocument()
   })
 
   it('switches to register form when "Create account" tab is clicked', () => {
@@ -116,6 +117,42 @@ describe('Login page', () => {
 
     await waitFor(() => {
       expect(useAuthStore.getState().token).toBe('tok-123')
+    })
+  })
+
+  it('shows verification required message when login blocked by unverified email', async () => {
+    fetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ detail: 'Email is not verified. Check your inbox or request a new verification link.' }),
+        { status: 403 }
+      )
+    )
+
+    renderLogin()
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'u@test.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'MyPass123!' } })
+    fireEvent.submit(screen.getByLabelText('Email').closest('form'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/email is not verified/i)).toBeInTheDocument()
+    })
+  })
+
+  it('register flow does not auto-login and shows success prompt', async () => {
+    fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ access_token: 'tok-123', email: 'new@test.com', username: 'new' }), { status: 201 })
+    )
+
+    renderLogin()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Create account' })[0])
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@test.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'MyPass123!' } })
+    fireEvent.change(screen.getByLabelText('Confirm Password'), { target: { value: 'MyPass123!' } })
+    fireEvent.submit(screen.getByLabelText('Confirm Password').closest('form'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/account created/i)).toBeInTheDocument()
+      expect(useAuthStore.getState().token).toBeNull()
     })
   })
 })

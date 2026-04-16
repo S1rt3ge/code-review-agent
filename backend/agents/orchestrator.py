@@ -12,12 +12,10 @@ Private helpers:
 """
 
 import asyncio
-import json
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
-from typing import Any
 
 from backend.agents.llm_router import LLMConfig, llm_router
 from backend.services.code_extractor import CodeChunk
@@ -80,7 +78,11 @@ async def _call_llm(prompt: str, config: LLMConfig) -> tuple[str, int, int]:
     )
     text = completion.choices[0].message.content or ""
     usage = completion.usage
-    return text, (usage.prompt_tokens if usage else 0), (usage.completion_tokens if usage else 0)
+    return (
+        text,
+        (usage.prompt_tokens if usage else 0),
+        (usage.completion_tokens if usage else 0),
+    )
 
 
 # ---------------------------------------------------------------------------

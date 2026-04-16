@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from backend.agents.llm_router import LLMConfig, LLMRouter, MODEL_MAP
+from backend.agents.llm_router import LLMRouter, MODEL_MAP
 
 
 @pytest.fixture
@@ -15,9 +15,12 @@ def router() -> LLMRouter:
 # Explicit preference: claude
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_select_claude_returns_config(router):
-    cfg = await router.select(preference="claude", agent_name="security", api_key_claude="sk-test")
+    cfg = await router.select(
+        preference="claude", agent_name="security", api_key_claude="sk-test"
+    )
     assert cfg.provider == "claude"
     assert cfg.api_key == "sk-test"
     assert cfg.model == MODEL_MAP["claude"]["high"]
@@ -26,23 +29,30 @@ async def test_select_claude_returns_config(router):
 
 @pytest.mark.asyncio
 async def test_select_claude_low_tier_for_style(router):
-    cfg = await router.select(preference="claude", agent_name="style", api_key_claude="sk-test")
+    cfg = await router.select(
+        preference="claude", agent_name="style", api_key_claude="sk-test"
+    )
     assert cfg.model == MODEL_MAP["claude"]["low"]
 
 
 @pytest.mark.asyncio
 async def test_select_claude_raises_without_key(router):
     with pytest.raises(ValueError, match="Claude API key"):
-        await router.select(preference="claude", agent_name="security", api_key_claude=None)
+        await router.select(
+            preference="claude", agent_name="security", api_key_claude=None
+        )
 
 
 # ---------------------------------------------------------------------------
 # Explicit preference: gpt
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_select_gpt_returns_config(router):
-    cfg = await router.select(preference="gpt", agent_name="logic", api_key_gpt="sk-gpt")
+    cfg = await router.select(
+        preference="gpt", agent_name="logic", api_key_gpt="sk-gpt"
+    )
     assert cfg.provider == "gpt"
     assert cfg.api_key == "sk-gpt"
     assert cfg.model == MODEL_MAP["gpt"]["high"]
@@ -57,6 +67,7 @@ async def test_select_gpt_raises_without_key(router):
 # ---------------------------------------------------------------------------
 # Explicit preference: local
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_select_local_returns_config_when_ollama_reachable(router):
@@ -88,6 +99,7 @@ async def test_select_local_raises_when_ollama_unreachable(router):
 # ---------------------------------------------------------------------------
 # Auto mode
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_auto_prefers_claude_over_gpt(router):
@@ -140,6 +152,7 @@ async def test_auto_raises_when_nothing_configured(router):
 # Unknown preference
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_unknown_preference_raises(router):
     with pytest.raises(ValueError, match="Unknown LLM preference"):
@@ -149,6 +162,7 @@ async def test_unknown_preference_raises(router):
 # ---------------------------------------------------------------------------
 # Probe helper
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_probe_ollama_returns_true_on_200(router):
@@ -166,6 +180,7 @@ async def test_probe_ollama_returns_true_on_200(router):
 @pytest.mark.asyncio
 async def test_probe_ollama_returns_false_on_connection_error(router):
     import httpx
+
     with patch("httpx.AsyncClient") as mock_client_cls:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(side_effect=httpx.ConnectError("refused"))
