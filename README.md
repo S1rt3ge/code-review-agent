@@ -309,6 +309,7 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 - Security reporting policy: `SECURITY.md`
 - Incident response runbook: `docs/incident-response-runbook.md`
 - Issue templates: `.github/ISSUE_TEMPLATE/`
+- Secrets/env policy: `docs/secrets-and-env-policy.md`
 
 ### Release process
 
