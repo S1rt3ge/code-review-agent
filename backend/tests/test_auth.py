@@ -9,7 +9,7 @@ Covers:
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -74,7 +74,9 @@ def test_verify_token_expired_raises_401():
         "exp": datetime.now(timezone.utc) - timedelta(seconds=1),
         "iat": datetime.now(timezone.utc) - timedelta(minutes=5),
     }
-    token = jwt.encode(expired_payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    token = jwt.encode(
+        expired_payload, settings.jwt_secret, algorithm=settings.jwt_algorithm
+    )
     with pytest.raises(HTTPException) as exc_info:
         verify_token(token)
     assert exc_info.value.status_code == 401
@@ -98,6 +100,10 @@ def test_verify_token_missing_sub_raises_401():
     with pytest.raises(HTTPException) as exc_info:
         verify_token(token)
     assert exc_info.value.status_code == 401
+
+
+def test_verify_password_with_malformed_hash_returns_false():
+    assert verify_password("any", "not-base64") is False
 
 
 # ---------------------------------------------------------------------------
@@ -139,3 +145,21 @@ async def test_get_current_user_invalid_token_raises_401():
     with pytest.raises(HTTPException) as exc_info:
         await get_current_user(token="not.a.valid.jwt", session=mock_session)
     assert exc_info.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_unverified_email_raises_403():
+    uid = uuid.uuid4()
+    token = create_access_token(uid, "unverified@example.com")
+
+    mock_user = MagicMock()
+    mock_user.id = uid
+    mock_user.email_verified = False
+
+    mock_session = AsyncMock()
+    mock_session.get = AsyncMock(return_value=mock_user)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_current_user(token=token, session=mock_session)
+
+    assert exc_info.value.status_code == 403

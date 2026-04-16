@@ -5,6 +5,10 @@ import { ProtectedRoute } from '@/components/ProtectedRoute.jsx'
 import { useUiStore } from '@/store/index.js'
 
 const Login = lazy(() => import('@/pages/Login.jsx').then(m => ({ default: m.Login })))
+const ForgotPassword = lazy(() => import('@/pages/AuthActions.jsx').then(m => ({ default: m.ForgotPassword })))
+const ResetPassword = lazy(() => import('@/pages/AuthActions.jsx').then(m => ({ default: m.ResetPassword })))
+const VerifyEmail = lazy(() => import('@/pages/AuthActions.jsx').then(m => ({ default: m.VerifyEmail })))
+const ResendVerification = lazy(() => import('@/pages/AuthActions.jsx').then(m => ({ default: m.ResendVerification })))
 const Dashboard = lazy(() => import('@/pages/Dashboard.jsx').then(m => ({ default: m.Dashboard })))
 const ReviewDetail = lazy(() => import('@/pages/ReviewDetail.jsx').then(m => ({ default: m.ReviewDetail })))
 const Settings = lazy(() => import('@/pages/Settings.jsx').then(m => ({ default: m.Settings })))
@@ -49,6 +53,10 @@ export function App() {
           <Routes>
             {/* Public */}
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/resend-verification" element={<ResendVerification />} />
 
             {/* Protected — Navbar shown inside so login page stays fullscreen */}
             <Route
