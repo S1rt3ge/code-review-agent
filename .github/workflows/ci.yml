@@ -30,6 +30,13 @@ jobs:
       - name: Install backend dependencies
         run: pip install -r requirements.txt
 
+      - name: Verify requirements lock is up to date
+        run: |
+          pip install pip-tools
+          pip-compile --quiet --generate-hashes --output-file requirements.txt requirements.in
+          git update-index -q --refresh
+          git diff --exit-code requirements.txt
+
       - name: Audit Python dependencies (high/critical)
         run: |
           pip install pip-audit
@@ -127,6 +134,13 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Verify requirements lock is up to date
+        run: |
+          pip install pip-tools
+          pip-compile --quiet --generate-hashes --output-file requirements.txt requirements.in
+          git update-index -q --refresh
+          git diff --exit-code requirements.txt
 
       - name: Run migrations
         run: |

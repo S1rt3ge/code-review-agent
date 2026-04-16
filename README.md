@@ -317,6 +317,14 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 - Release checklist: `docs/release-checklist.md`
 - Manual release workflow: `.github/workflows/release.yml`
 
+### Python dependencies (locked)
+
+- Source spec: `requirements.in`
+- Pinned lockfile: `requirements.txt` (generated with `pip-tools`)
+- Refresh lockfile:
+  - `pip install pip-tools`
+  - `pip-compile --generate-hashes --output-file requirements.txt requirements.in`
+
 ---
 
 ## License
