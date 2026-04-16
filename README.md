@@ -297,6 +297,12 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 - Branch protection baseline: `docs/branch-protection-policy.md`
 - Governance audit checklist: `docs/governance-checklist.md`
 
+### Automation and release hygiene
+
+- Dependabot updates: `.github/dependabot.yml`
+- Automatic PR labeling: `.github/workflows/pr-labeler.yml` + `.github/labeler.yml`
+- PR release-note template: `.github/pull_request_template.md`
+
 ---
 
 ## License
