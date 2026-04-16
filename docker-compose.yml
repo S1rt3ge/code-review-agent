@@ -63,7 +63,7 @@ services:
         condition: service_healthy
     volumes:
       - .:/app
-    command: pytest backend/tests/ -v
+    command: sh -c "python scripts/migrate.py && pytest backend/tests/ -v"
     profiles:
       - test
 

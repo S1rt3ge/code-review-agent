@@ -17,20 +17,41 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
 from backend.config import settings
 from backend.models.schemas import HealthResponse
 from backend.routers import auth, dashboard, github, repositories, reviews
 from backend.routers import settings as settings_router
+from backend.services import analysis_queue
 from backend.services.ws_manager import ws_manager
+from backend.services.recovery import recover_stuck_reviews
 from backend.utils.database import async_session_factory, engine
+from backend.utils.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
+
+if settings.sentry_dsn and settings.app_env != "test":
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.app_env,
+        traces_sample_rate=settings.sentry_traces_sample_rate,
+        profiles_sample_rate=settings.sentry_profiles_sample_rate,
+        integrations=[
+            FastApiIntegration(),
+            SqlalchemyIntegration(),
+        ],
+    )
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -51,6 +72,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             async with async_session_factory() as session:
                 await session.execute(text("SELECT 1"))
         logger.info("Database connection verified")
+
+        async with async_session_factory() as session:
+            recovered_count = await recover_stuck_reviews(session)
+            await session.commit()
+        if recovered_count:
+            logger.warning(
+                "Recovered %d reviews stuck in analyzing status",
+                recovered_count,
+            )
+
+        await analysis_queue.startup()
+        await ws_manager.startup()
     except Exception as e:
         logger.warning(f"Database not reachable at startup: {e}")
 
@@ -58,6 +91,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Shutdown
     logger.info("Shutting down application")
+    await analysis_queue.shutdown()
+    await ws_manager.shutdown()
     await engine.dispose()
     logger.info("Database engine disposed")
 
@@ -73,6 +108,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -81,6 +119,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SlowAPIMiddleware)
 
 # Routers (all under /api prefix)
 app.include_router(auth.router, prefix="/api")
@@ -160,7 +199,9 @@ async def websocket_progress(websocket: WebSocket, review_id: str) -> None:
 
 _FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
 if _FRONTEND_DIST.exists():
-    app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
+    app.mount(
+        "/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets"
+    )
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str) -> FileResponse:

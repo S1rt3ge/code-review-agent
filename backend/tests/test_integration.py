@@ -12,15 +12,17 @@ import hashlib
 import hmac
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import insert
+from sqlalchemy import insert, select
 
 from backend.main import app
-from backend.models.db_models import Repository
+from backend.models.db_models import Repository, Review, User
+from backend.utils.tokens import hash_token
 from backend.utils.database import async_session_factory
 
 
@@ -64,6 +66,14 @@ async def auth_headers(client):
         json={"email": email, "username": username, "password": password},
     )
     assert r.status_code == 201, r.text
+
+    # Mark verified for tests that need authenticated access.
+    async with async_session_factory() as session:
+        result = await session.execute(select(User).where(User.email == email))
+        user = result.scalar_one()
+        user.email_verified = True
+        user.email_verified_at = datetime.now(timezone.utc)
+        await session.commit()
 
     r = await client.post(
         "/api/auth/token",
@@ -114,7 +124,11 @@ async def db_repo_id(auth_headers, client):
 async def test_register_success(client):
     r = await client.post(
         "/api/auth/register",
-        json={"email": _unique_email(), "username": f"u_{uuid.uuid4().hex[:6]}", "password": "Secret123!"},
+        json={
+            "email": _unique_email(),
+            "username": f"u_{uuid.uuid4().hex[:6]}",
+            "password": "Secret123!",
+        },
     )
     assert r.status_code == 201
     assert "access_token" in r.json()
@@ -124,7 +138,11 @@ async def test_register_success(client):
 @pytest.mark.asyncio
 async def test_register_duplicate_email_rejected(client):
     email = _unique_email()
-    payload = {"email": email, "username": f"u_{uuid.uuid4().hex[:6]}", "password": "Secret123!"}
+    payload = {
+        "email": email,
+        "username": f"u_{uuid.uuid4().hex[:6]}",
+        "password": "Secret123!",
+    }
     await client.post("/api/auth/register", json=payload)
     r = await client.post("/api/auth/register", json={**payload, "username": "other"})
     assert r.status_code == 409
@@ -136,7 +154,11 @@ async def test_login_wrong_password(client):
     email = _unique_email()
     await client.post(
         "/api/auth/register",
-        json={"email": email, "username": f"u_{uuid.uuid4().hex[:6]}", "password": "Correct1!"},
+        json={
+            "email": email,
+            "username": f"u_{uuid.uuid4().hex[:6]}",
+            "password": "Correct1!",
+        },
     )
     r = await client.post(
         "/api/auth/token",
@@ -144,6 +166,188 @@ async def test_login_wrong_password(client):
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert r.status_code == 401
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_login_unverified_email_rejected(client):
+    email = _unique_email()
+    await client.post(
+        "/api/auth/register",
+        json={
+            "email": email,
+            "username": f"u_{uuid.uuid4().hex[:6]}",
+            "password": "Correct1!",
+        },
+    )
+
+    r = await client.post(
+        "/api/auth/token",
+        data={"username": email, "password": "Correct1!"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert r.status_code == 403
+    assert "not verified" in r.json()["detail"].lower()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_password_reset_request_returns_generic_message(client, auth_headers):
+    me = await client.get("/api/auth/me", headers=auth_headers)
+    email = me.json()["email"]
+
+    r = await client.post(
+        "/api/auth/password-reset/request",
+        json={"email": email},
+    )
+    assert r.status_code == 200
+    assert "password reset link" in r.json()["message"].lower()
+
+    me = await client.get("/api/auth/me", headers=auth_headers)
+    user_id = me.json()["id"]
+    async with async_session_factory() as session:
+        user = await session.get(User, user_id)
+        assert user is not None
+        assert user.password_reset_token_hash is not None
+        assert user.password_reset_expires_at is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_password_reset_confirm_with_invalid_token(client):
+    r = await client.post(
+        "/api/auth/password-reset/confirm",
+        json={"token": "invalid-token", "new_password": "NewPass123!"},
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_email_verification_confirm_with_invalid_token(client):
+    r = await client.post(
+        "/api/auth/email-verification/confirm",
+        json={"token": "invalid-token"},
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_email_verification_request_returns_generic_message(client, auth_headers):
+    me = await client.get("/api/auth/me", headers=auth_headers)
+    email = me.json()["email"]
+
+    r = await client.post(
+        "/api/auth/email-verification/request",
+        json={"email": email},
+    )
+    assert r.status_code == 200
+    assert "verification link" in r.json()["message"].lower()
+
+    me = await client.get("/api/auth/me", headers=auth_headers)
+    user_id = me.json()["id"]
+    async with async_session_factory() as session:
+        user = await session.get(User, user_id)
+        assert user is not None
+        assert user.email_verification_token_hash is not None
+        assert user.email_verification_expires_at is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_email_verification_confirm_allows_login(client):
+    email = _unique_email()
+    password = "Verified1!"
+    reg = await client.post(
+        "/api/auth/register",
+        json={
+            "email": email,
+            "username": f"u_{uuid.uuid4().hex[:6]}",
+            "password": password,
+        },
+    )
+    assert reg.status_code == 201
+
+    # before verification login is blocked
+    blocked = await client.post(
+        "/api/auth/token",
+        data={"username": email, "password": password},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert blocked.status_code == 403
+
+    async with async_session_factory() as session:
+        result = await session.execute(select(User).where(User.email == email))
+        user = result.scalar_one()
+        assert user.email_verification_token_hash is not None
+        raw_token = "manual-token"
+        user.email_verification_token_hash = hash_token(raw_token)
+        user.email_verification_expires_at = datetime.now(timezone.utc) + timedelta(
+            minutes=30
+        )
+        await session.commit()
+
+    verified = await client.post(
+        "/api/auth/email-verification/confirm",
+        json={"token": raw_token},
+    )
+    assert verified.status_code == 200
+
+    allowed = await client.post(
+        "/api/auth/token",
+        data={"username": email, "password": password},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert allowed.status_code == 200
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_password_reset_confirm_changes_password(client):
+    email = _unique_email()
+    old_password = "OldPass123!"
+    new_password = "NewPass123!"
+
+    reg = await client.post(
+        "/api/auth/register",
+        json={
+            "email": email,
+            "username": f"u_{uuid.uuid4().hex[:6]}",
+            "password": old_password,
+        },
+    )
+    assert reg.status_code == 201
+
+    async with async_session_factory() as session:
+        result = await session.execute(select(User).where(User.email == email))
+        user = result.scalar_one()
+        user.email_verified = True
+        user.password_reset_token_hash = hash_token("reset-token")
+        user.password_reset_expires_at = datetime.now(timezone.utc) + timedelta(
+            minutes=30
+        )
+        await session.commit()
+
+    confirm = await client.post(
+        "/api/auth/password-reset/confirm",
+        json={"token": "reset-token", "new_password": new_password},
+    )
+    assert confirm.status_code == 200
+
+    old_login = await client.post(
+        "/api/auth/token",
+        data={"username": email, "password": old_password},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert old_login.status_code == 401
+
+    new_login = await client.post(
+        "/api/auth/token",
+        data={"username": email, "password": new_password},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert new_login.status_code == 200
 
 
 @pytest.mark.integration
@@ -178,7 +382,11 @@ async def test_protected_route_rejects_bad_token(client):
 async def test_create_review(client, auth_headers, db_repo_id):
     r = await client.post(
         "/api/reviews",
-        json={"repo_id": db_repo_id, "github_pr_number": 42, "selected_agents": ["security"]},
+        json={
+            "repo_id": db_repo_id,
+            "github_pr_number": 42,
+            "selected_agents": ["security"],
+        },
         headers=auth_headers,
     )
     assert r.status_code == 201
@@ -235,7 +443,7 @@ async def test_analyze_sets_status_analyzing(client, auth_headers, db_repo_id):
     )
     review_id = r.json()["id"]
 
-    with patch("backend.routers.reviews.run_analysis", new_callable=AsyncMock):
+    with patch("backend.routers.reviews.enqueue_analysis", new_callable=AsyncMock):
         r = await client.post(f"/api/reviews/{review_id}/analyze", headers=auth_headers)
     assert r.status_code == 200
     assert r.json()["status"] == "analyzing"
@@ -243,7 +451,9 @@ async def test_analyze_sets_status_analyzing(client, auth_headers, db_repo_id):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_analyze_conflict_when_already_analyzing(client, auth_headers, db_repo_id):
+async def test_analyze_conflict_when_already_analyzing(
+    client, auth_headers, db_repo_id
+):
     r = await client.post(
         "/api/reviews",
         json={"repo_id": db_repo_id, "github_pr_number": 22},
@@ -251,7 +461,7 @@ async def test_analyze_conflict_when_already_analyzing(client, auth_headers, db_
     )
     review_id = r.json()["id"]
 
-    with patch("backend.routers.reviews.run_analysis", new_callable=AsyncMock):
+    with patch("backend.routers.reviews.enqueue_analysis", new_callable=AsyncMock):
         await client.post(f"/api/reviews/{review_id}/analyze", headers=auth_headers)
         r = await client.post(f"/api/reviews/{review_id}/analyze", headers=auth_headers)
     assert r.status_code == 409
@@ -315,8 +525,13 @@ async def test_dashboard_stats_shape(client, auth_headers):
     r = await client.get("/api/dashboard/stats", headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
-    for key in ("total_reviews", "reviews_today", "findings_by_severity",
-                "findings_by_agent", "tokens_used_this_month"):
+    for key in (
+        "total_reviews",
+        "reviews_today",
+        "findings_by_severity",
+        "findings_by_agent",
+        "tokens_used_this_month",
+    ):
         assert key in body, f"missing key: {key}"
 
 
@@ -324,6 +539,7 @@ async def test_dashboard_stats_shape(client, auth_headers):
 @pytest.mark.asyncio
 async def test_dashboard_stats_isolated_per_user(client):
     """Two different users should see only their own totals."""
+
     async def make_user_token():
         email = _unique_email()
         username = f"u_{uuid.uuid4().hex[:6]}"
@@ -331,6 +547,14 @@ async def test_dashboard_stats_isolated_per_user(client):
             "/api/auth/register",
             json={"email": email, "username": username, "password": "Pass123!"},
         )
+
+        async with async_session_factory() as session:
+            result = await session.execute(select(User).where(User.email == email))
+            user = result.scalar_one()
+            user.email_verified = True
+            user.email_verified_at = datetime.now(timezone.utc)
+            await session.commit()
+
         r = await client.post(
             "/api/auth/token",
             data={"username": email, "password": "Pass123!"},
@@ -341,8 +565,12 @@ async def test_dashboard_stats_isolated_per_user(client):
     tok_a = await make_user_token()
     tok_b = await make_user_token()
 
-    r_a = await client.get("/api/dashboard/stats", headers={"Authorization": f"Bearer {tok_a}"})
-    r_b = await client.get("/api/dashboard/stats", headers={"Authorization": f"Bearer {tok_b}"})
+    r_a = await client.get(
+        "/api/dashboard/stats", headers={"Authorization": f"Bearer {tok_a}"}
+    )
+    r_b = await client.get(
+        "/api/dashboard/stats", headers={"Authorization": f"Bearer {tok_b}"}
+    )
     assert r_a.status_code == 200
     assert r_b.status_code == 200
     # Both fresh users have 0 reviews — isolation is enforced
@@ -386,20 +614,22 @@ async def test_webhook_bad_signature_rejected(client):
 async def test_webhook_unsupported_action_ignored(client):
     """A valid signature with an unknown action returns 202 + 'ignored'."""
     secret = "test-webhook-secret"
-    payload = json.dumps({
-        "action": "closed",
-        "pull_request": {
-            "number": 1,
-            "title": "test",
-            "head": {"sha": "abc"},
-            "base": {"sha": "def"},
-        },
-        "repository": {
-            "owner": {"login": "org"},
-            "name": "repo",
-            "full_name": "org/repo",
-        },
-    }).encode()
+    payload = json.dumps(
+        {
+            "action": "closed",
+            "pull_request": {
+                "number": 1,
+                "title": "test",
+                "head": {"sha": "abc"},
+                "base": {"sha": "def"},
+            },
+            "repository": {
+                "owner": {"login": "org"},
+                "name": "repo",
+                "full_name": "org/repo",
+            },
+        }
+    ).encode()
 
     with patch("backend.config.settings.github_webhook_secret", secret):
         r = await client.post(
@@ -413,3 +643,175 @@ async def test_webhook_unsupported_action_ignored(client):
         )
     assert r.status_code == 202
     assert r.json()["status"] == "ignored"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_webhook_opened_queues_analysis(client):
+    """A valid opened PR webhook creates pending review and queues analysis."""
+    user_id = uuid.uuid4()
+    repo_id = uuid.uuid4()
+    owner = f"org_{uuid.uuid4().hex[:6]}"
+    name = f"repo_{uuid.uuid4().hex[:6]}"
+
+    async with async_session_factory() as session:
+        await session.execute(
+            insert(User).values(
+                id=user_id,
+                email=f"hook_{uuid.uuid4().hex[:8]}@test.com",
+                username=f"hook_{uuid.uuid4().hex[:8]}",
+                hashed_password="x",
+                email_verified=True,
+            )
+        )
+        await session.execute(
+            insert(Repository).values(
+                id=repo_id,
+                user_id=user_id,
+                github_repo_owner=owner,
+                github_repo_name=name,
+                github_repo_url=f"https://github.com/{owner}/{name}",
+                enabled=True,
+            )
+        )
+        await session.commit()
+
+    secret = "test-webhook-secret"
+    payload = json.dumps(
+        {
+            "action": "opened",
+            "pull_request": {
+                "number": 77,
+                "title": "feature: webhook queue",
+                "head": {"sha": "headsha123"},
+                "base": {"sha": "basesha123"},
+            },
+            "repository": {
+                "owner": {"login": owner},
+                "name": name,
+                "full_name": f"{owner}/{name}",
+            },
+        }
+    ).encode()
+
+    with (
+        patch("backend.config.settings.github_webhook_secret", secret),
+        patch(
+            "backend.routers.github.enqueue_analysis", new_callable=AsyncMock
+        ) as enqueue,
+    ):
+        r = await client.post(
+            "/api/github/webhook",
+            content=payload,
+            headers={
+                "Content-Type": "application/json",
+                "X-GitHub-Event": "pull_request",
+                "X-Hub-Signature-256": _sign(payload, secret),
+            },
+        )
+
+    assert r.status_code == 202
+    assert r.json()["status"] == "pending"
+    enqueue.assert_called_once()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_webhook_duplicate_returns_existing_without_requeue(client):
+    """Duplicate webhook should return existing pending review and not requeue."""
+    user_id = uuid.uuid4()
+    repo_id = uuid.uuid4()
+    review_id = uuid.uuid4()
+    owner = f"orgdup_{uuid.uuid4().hex[:6]}"
+    name = f"repodup_{uuid.uuid4().hex[:6]}"
+
+    async with async_session_factory() as session:
+        await session.execute(
+            insert(User).values(
+                id=user_id,
+                email=f"hookdup_{uuid.uuid4().hex[:8]}@test.com",
+                username=f"hookdup_{uuid.uuid4().hex[:8]}",
+                hashed_password="x",
+                email_verified=True,
+            )
+        )
+        await session.execute(
+            insert(Repository).values(
+                id=repo_id,
+                user_id=user_id,
+                github_repo_owner=owner,
+                github_repo_name=name,
+                github_repo_url=f"https://github.com/{owner}/{name}",
+                enabled=True,
+            )
+        )
+        await session.execute(
+            insert(Review).values(
+                id=review_id,
+                user_id=user_id,
+                repo_id=repo_id,
+                github_pr_number=88,
+                head_sha="dupheadsha",
+                status="pending",
+            )
+        )
+        await session.commit()
+
+    secret = "test-webhook-secret"
+    payload = json.dumps(
+        {
+            "action": "opened",
+            "pull_request": {
+                "number": 88,
+                "title": "feature: duplicate",
+                "head": {"sha": "dupheadsha"},
+                "base": {"sha": "base"},
+            },
+            "repository": {
+                "owner": {"login": owner},
+                "name": name,
+                "full_name": f"{owner}/{name}",
+            },
+        }
+    ).encode()
+
+    with (
+        patch("backend.config.settings.github_webhook_secret", secret),
+        patch(
+            "backend.routers.github.enqueue_analysis", new_callable=AsyncMock
+        ) as enqueue,
+    ):
+        r = await client.post(
+            "/api/github/webhook",
+            content=payload,
+            headers={
+                "Content-Type": "application/json",
+                "X-GitHub-Event": "pull_request",
+                "X-Hub-Signature-256": _sign(payload, secret),
+            },
+        )
+
+    assert r.status_code == 202
+    assert r.json()["status"] == "pending"
+    assert r.json()["review_id"] == str(review_id)
+    enqueue.assert_not_called()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_analyze_endpoint_queues_analysis(client, auth_headers, db_repo_id):
+    r = await client.post(
+        "/api/reviews",
+        json={"repo_id": db_repo_id, "github_pr_number": 501},
+        headers=auth_headers,
+    )
+    review_id = r.json()["id"]
+
+    with patch(
+        "backend.routers.reviews.enqueue_analysis", new_callable=AsyncMock
+    ) as enqueue:
+        r = await client.post(f"/api/reviews/{review_id}/analyze", headers=auth_headers)
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "analyzing"
+    enqueue.assert_called_once()

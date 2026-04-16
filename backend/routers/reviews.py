@@ -11,7 +11,6 @@ Functions:
     post_comment: POST /reviews/{review_id}/post-comment -- post to GitHub PR.
 """
 
-import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -21,7 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.models.db_models import Finding, Repository, Review, User
+from backend.models.db_models import Repository, Review, User
 from backend.models.schemas import (
     AnalyzeResponse,
     CreateReviewRequest,
@@ -31,7 +30,7 @@ from backend.models.schemas import (
     ReviewListResponse,
     ReviewResponse,
 )
-from backend.services.analyzer import run_analysis
+from backend.services.analysis_queue import enqueue_analysis
 from backend.services.pr_commenter import build_comment
 from backend.services.github_api import get_github_client
 from backend.utils.auth import get_current_user
@@ -40,11 +39,6 @@ from backend.utils.database import get_db
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
-
-# Strong references to background analysis tasks prevent them from being
-# garbage-collected before they finish (asyncio.create_task is fire-and-forget
-# and the GC can destroy the task otherwise).
-_background_tasks: set[asyncio.Task] = set()
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -85,7 +79,11 @@ async def list_reviews(
         Paginated list of review items with total count.
     """
     # Build base query — always scoped to the authenticated user
-    stmt = select(Review).where(Review.user_id == current_user.id).order_by(Review.created_at.desc())
+    stmt = (
+        select(Review)
+        .where(Review.user_id == current_user.id)
+        .order_by(Review.created_at.desc())
+    )
     count_stmt = select(func.count(Review.id)).where(Review.user_id == current_user.id)
 
     # Apply filters
@@ -148,7 +146,9 @@ async def create_review(
     )
     review = result.scalar_one()
 
-    logger.info(f"Manually created review {review.id} for PR #{payload.github_pr_number}")
+    logger.info(
+        f"Manually created review {review.id} for PR #{payload.github_pr_number}"
+    )
 
     return ReviewResponse.model_validate(review)
 
@@ -234,18 +234,17 @@ async def analyze_review(
 
     # Override agents if requested
     if force_agents:
-        review.selected_agents = [a.strip() for a in force_agents.split(",") if a.strip()]
+        review.selected_agents = [
+            a.strip() for a in force_agents.split(",") if a.strip()
+        ]
 
     review.status = "analyzing"
     await session.flush()
 
     logger.info(f"Analysis started for review {review.id}")
 
-    # Fire-and-forget: run_analysis opens its own session internally.
-    # Keep a strong reference so the GC doesn't destroy the task mid-execution.
-    task = asyncio.create_task(run_analysis(review.id))
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    # Fire-and-forget background analysis scheduling.
+    await enqueue_analysis(review.id)
 
     return AnalyzeResponse(review_id=review.id, status="analyzing")
 
@@ -358,7 +357,9 @@ async def post_comment(
         await session.flush()
 
     except Exception as exc:
-        logger.error(f"GitHub comment post failed for review {review.id}: {exc}", exc_info=True)
+        logger.error(
+            f"GitHub comment post failed for review {review.id}: {exc}", exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"GitHub API error: {exc}",
