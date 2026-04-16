@@ -323,7 +323,7 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 - Pinned lockfile: `requirements.txt` (generated with `pip-tools`)
 - Refresh lockfile:
   - `pip install pip-tools`
-  - `pip-compile --generate-hashes --output-file requirements.txt requirements.in`
+  - `pip-compile --generate-hashes --strip-extras --allow-unsafe --output-file requirements.txt requirements.in`
 
 ---
 
