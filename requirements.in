@@ -9,8 +9,6 @@ httpx>=0.25
 sentry-sdk[fastapi]>=2.0
 pydantic>=2.0
 pydantic-settings>=2.0
-colorama; platform_system == "Windows"
-tzdata; platform_system == "Windows"
 python-jose[cryptography]>=3.3
 cryptography>=41.0
 websockets>=12.0
