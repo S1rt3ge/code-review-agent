@@ -303,6 +303,12 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 - Automatic PR labeling: `.github/workflows/pr-labeler.yml` + `.github/labeler.yml`
 - PR release-note template: `.github/pull_request_template.md`
 
+### Security and incident response
+
+- Security reporting policy: `SECURITY.md`
+- Incident response runbook: `docs/incident-response-runbook.md`
+- Issue templates: `.github/ISSUE_TEMPLATE/`
+
 ---
 
 ## License
