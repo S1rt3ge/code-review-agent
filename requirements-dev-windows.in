@@ -1,0 +1,4 @@
+-r requirements.txt
+
+colorama>=0.4.6
+tzdata>=2026.1

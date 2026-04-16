@@ -317,6 +317,17 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 - Release checklist: `docs/release-checklist.md`
 - Manual release workflow: `.github/workflows/release.yml`
 
+### Python dependencies (locked)
+
+- Source spec: `requirements.in`
+- Canonical runtime lockfile: `requirements.txt` (generated with `pip-tools`)
+- Windows dev overlay: `requirements-dev-windows.in`
+- Refresh lockfile:
+  - `pip install pip-tools`
+  - `pip-compile --generate-hashes --strip-extras --allow-unsafe --output-file requirements.txt requirements.in`
+- Local Windows install:
+  - `pip install -r requirements.txt -r requirements-dev-windows.in`
+
 ---
 
 ## License
