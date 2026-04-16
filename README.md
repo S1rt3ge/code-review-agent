@@ -291,6 +291,12 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 - Frontend dependency audit uses `npm audit --audit-level=critical`.
 - CI publishes SBOM artifacts for backend and frontend (`CycloneDX`: Python XML + frontend JSON).
 
+### Repository governance
+
+- Code ownership rules: `.github/CODEOWNERS`
+- Branch protection baseline: `docs/branch-protection-policy.md`
+- Governance audit checklist: `docs/governance-checklist.md`
+
 ---
 
 ## License
