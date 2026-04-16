@@ -42,6 +42,18 @@ jobs:
             exit 1
           fi
 
+      - name: Ensure target commit passed required checks
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          echo "Checking statuses for commit $SHA"
+          STATE=$(gh api "repos/${{ github.repository }}/commits/$SHA/status" --jq '.state')
+          if [[ "$STATE" != "success" ]]; then
+            echo "Required status checks are not all successful for $SHA (state=$STATE)"
+            exit 1
+          fi
+
       - name: Check if tag already exists
         run: |
           if git rev-parse "${{ inputs.version }}" >/dev/null 2>&1; then

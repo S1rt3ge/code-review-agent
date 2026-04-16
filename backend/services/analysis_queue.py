@@ -14,6 +14,11 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, func, select
 
+try:
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+except Exception:  # pragma: no cover - fallback for non-postgres test envs
+    pg_insert = None
+
 from backend.config import settings
 from backend.models.db_models import AnalysisJob
 from backend.services.analyzer import run_analysis
@@ -28,29 +33,61 @@ _instance_id = f"{socket.gethostname()}:{uuid.uuid4().hex[:8]}"
 async def enqueue_analysis(review_id: uuid.UUID) -> None:
     """Create or reset a durable analysis job for a review."""
     now = datetime.now(timezone.utc)
-    async with async_session_factory() as session:
-        result = await session.execute(
-            select(AnalysisJob).where(AnalysisJob.review_id == review_id)
-        )
-        job = result.scalar_one_or_none()
-        if job is None:
-            session.add(
-                AnalysisJob(
-                    review_id=review_id,
-                    status="pending",
-                    attempts=0,
-                    next_run_at=now,
-                )
-            )
-        else:
-            if job.status in {"done", "error"}:
-                job.attempts = 0
-            job.status = "pending"
-            job.next_run_at = now
-            job.locked_at = None
-            job.locked_by = None
-            job.error_message = None
 
+    if pg_insert is None or not callable(pg_insert):
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(AnalysisJob).where(AnalysisJob.review_id == review_id)
+            )
+            job = result.scalar_one_or_none()
+            if job is None:
+                session.add(
+                    AnalysisJob(
+                        review_id=review_id,
+                        status="pending",
+                        attempts=0,
+                        next_run_at=now,
+                    )
+                )
+            else:
+                job.status = "pending"
+                job.attempts = 0
+                job.next_run_at = now
+                job.locked_at = None
+                job.locked_by = None
+                job.error_message = None
+                job.completed_at = None
+            await session.commit()
+            return
+
+    upsert_stmt = (
+        pg_insert(AnalysisJob)
+        .values(
+            review_id=review_id,
+            status="pending",
+            attempts=0,
+            next_run_at=now,
+            locked_at=None,
+            locked_by=None,
+            error_message=None,
+            completed_at=None,
+        )
+        .on_conflict_do_update(
+            index_elements=[AnalysisJob.review_id],
+            set_={
+                "status": "pending",
+                "attempts": 0,
+                "next_run_at": now,
+                "locked_at": None,
+                "locked_by": None,
+                "error_message": None,
+                "completed_at": None,
+            },
+        )
+    )
+
+    async with async_session_factory() as session:
+        await session.execute(upsert_stmt)
         await session.commit()
 
 
@@ -89,6 +126,7 @@ async def _worker_loop() -> None:
     """Poll pending jobs and process them one by one."""
     while True:
         try:
+            await _recover_stale_running_jobs()
             jobs = await _claim_jobs(limit=settings.analysis_queue_batch_size)
             if not jobs:
                 await asyncio.sleep(settings.analysis_queue_poll_interval_seconds)
@@ -133,12 +171,79 @@ async def _claim_jobs(limit: int) -> list[AnalysisJob]:
 
 async def _process_job(job: AnalysisJob) -> None:
     """Execute one claimed analysis job and persist result."""
+    heartbeat_task = asyncio.create_task(_heartbeat_lock(job.id))
     try:
         await run_analysis(job.review_id)
     except Exception as exc:
         await _mark_job_error(job.id, str(exc))
     else:
         await _mark_job_done(job.id)
+    finally:
+        heartbeat_task.cancel()
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
+
+
+async def _heartbeat_lock(job_id: uuid.UUID) -> None:
+    """Periodically refresh lock timestamp while a job is running."""
+    while True:
+        await asyncio.sleep(settings.analysis_queue_lock_heartbeat_seconds)
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(AnalysisJob).where(
+                    AnalysisJob.id == job_id,
+                    AnalysisJob.status == "running",
+                )
+            )
+            job = result.scalar_one_or_none()
+            if job is None:
+                return
+            job.locked_at = datetime.now(timezone.utc)
+            await session.commit()
+
+
+async def _recover_stale_running_jobs() -> int:
+    """Move stale running jobs back to pending for reprocessing."""
+    cutoff = datetime.now(timezone.utc) - timedelta(
+        seconds=settings.analysis_queue_stale_lock_seconds
+    )
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(AnalysisJob)
+            .where(
+                and_(
+                    AnalysisJob.status == "running",
+                    AnalysisJob.locked_at.is_not(None),
+                    AnalysisJob.locked_at < cutoff,
+                )
+            )
+            .with_for_update(skip_locked=True)
+        )
+        stale_jobs = result.scalars().all()
+
+        if not stale_jobs:
+            return 0
+
+        now = datetime.now(timezone.utc)
+        for job in stale_jobs:
+            if job.attempts >= settings.analysis_queue_max_attempts:
+                job.status = "error"
+                job.completed_at = now
+                job.error_message = (
+                    "Analysis job exceeded retry limit after stale lock recovery"
+                )
+            else:
+                job.status = "pending"
+                job.next_run_at = now
+                job.locked_at = None
+                job.locked_by = None
+
+        await session.commit()
+        recovered = len(stale_jobs)
+        logger.warning("Recovered %d stale running analysis jobs", recovered)
+        return recovered
 
 
 async def _mark_job_done(job_id: uuid.UUID) -> None:

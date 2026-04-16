@@ -69,6 +69,14 @@ class Settings(BaseSettings):
         default=15,
         alias="ANALYSIS_QUEUE_BASE_RETRY_SECONDS",
     )
+    analysis_queue_stale_lock_seconds: int = Field(
+        default=300,
+        alias="ANALYSIS_QUEUE_STALE_LOCK_SECONDS",
+    )
+    analysis_queue_lock_heartbeat_seconds: int = Field(
+        default=15,
+        alias="ANALYSIS_QUEUE_LOCK_HEARTBEAT_SECONDS",
+    )
 
     @field_validator("database_url", mode="before")
     @classmethod
