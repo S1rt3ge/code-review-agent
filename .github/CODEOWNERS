@@ -1,0 +1,14 @@
+# Default owner for all files
+* @S1rt3ge
+
+# Backend
+/backend/ @S1rt3ge
+/supabase/ @S1rt3ge
+
+# Frontend
+/frontend/ @S1rt3ge
+
+# CI/CD and infra config
+/.github/ @S1rt3ge
+/docker-compose.yml @S1rt3ge
+/Dockerfile @S1rt3ge
