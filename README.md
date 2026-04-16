@@ -283,6 +283,7 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 - Analysis execution is now driven by a DB-backed `analysis_jobs` table.
 - `POST /api/reviews/{id}/analyze` and GitHub webhook events enqueue durable jobs instead of raw in-process tasks.
 - A worker loop starts with the app and processes due jobs with retry/backoff.
+- Queue stale-lock recovery returns orphaned `running` jobs to `pending` for retry.
 
 ### CI security gates
 
@@ -302,6 +303,19 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 - Dependabot updates: `.github/dependabot.yml`
 - Automatic PR labeling: `.github/workflows/pr-labeler.yml` + `.github/labeler.yml`
 - PR release-note template: `.github/pull_request_template.md`
+
+### Security and incident response
+
+- Security reporting policy: `SECURITY.md`
+- Incident response runbook: `docs/incident-response-runbook.md`
+- Issue templates: `.github/ISSUE_TEMPLATE/`
+- Secrets/env policy: `docs/secrets-and-env-policy.md`
+
+### Release process
+
+- Changelog: `CHANGELOG.md`
+- Release checklist: `docs/release-checklist.md`
+- Manual release workflow: `.github/workflows/release.yml`
 
 ---
 
