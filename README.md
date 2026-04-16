@@ -284,6 +284,13 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 - `POST /api/reviews/{id}/analyze` and GitHub webhook events enqueue durable jobs instead of raw in-process tasks.
 - A worker loop starts with the app and processes due jobs with retry/backoff.
 
+### CI security gates
+
+- CI now runs secret scanning (`gitleaks`) on repository history and diffs.
+- Backend dependency audit uses `pip-audit` (fails on known vulnerable packages).
+- Frontend dependency audit uses `npm audit --audit-level=critical`.
+- CI publishes SBOM artifacts for backend and frontend (`CycloneDX`: Python XML + frontend JSON).
+
 ---
 
 ## License
