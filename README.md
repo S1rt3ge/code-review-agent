@@ -231,6 +231,10 @@ code-review-agent/
 |---|---|---|---|
 | POST | `/api/auth/register` | — | Create account, returns JWT |
 | POST | `/api/auth/token` | — | Login (OAuth2 form), returns JWT |
+| POST | `/api/auth/password-reset/request` | — | Request password reset link |
+| POST | `/api/auth/password-reset/confirm` | — | Confirm reset token + set new password |
+| POST | `/api/auth/email-verification/request` | — | Resend email verification link |
+| POST | `/api/auth/email-verification/confirm` | — | Verify account email token |
 | GET | `/api/auth/me` | JWT | Current user profile |
 | GET | `/api/reviews` | JWT | List reviews (paginated) |
 | POST | `/api/reviews` | JWT | Create review manually |
@@ -262,6 +266,23 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 | `GITHUB_APP_PRIVATE_KEY` | No | GitHub App RSA private key |
 | `GITHUB_WEBHOOK_SECRET` | No | Webhook HMAC secret |
 | `CORS_ORIGINS` | No | Allowed origins (default: localhost dev ports) |
+| `FRONTEND_BASE_URL` | No | Base URL used in email links |
+| `SMTP_HOST` / `SMTP_PORT` | No | SMTP server settings for real email delivery |
+| `SMTP_USER` / `SMTP_PASSWORD` | No | SMTP auth credentials |
+| `SMTP_USE_TLS` / `SMTP_FROM` | No | SMTP security + sender |
+| `SENTRY_DSN` | No | Backend Sentry DSN |
+| `VITE_SENTRY_DSN` | No | Frontend Sentry DSN |
+| `REDIS_URL` | No | Optional Redis for multi-instance WS fan-out |
+| `ANALYSIS_QUEUE_*` | No | Durable analysis queue poll/retry tuning |
+
+> Security note: in non-dev environments (`APP_ENV` not development/local/test),
+> app startup is blocked if `JWT_SECRET` remains `change-me-in-production`.
+
+### Durable analysis queue
+
+- Analysis execution is now driven by a DB-backed `analysis_jobs` table.
+- `POST /api/reviews/{id}/analyze` and GitHub webhook events enqueue durable jobs instead of raw in-process tasks.
+- A worker loop starts with the app and processes due jobs with retry/backoff.
 
 ---
 

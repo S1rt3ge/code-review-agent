@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { Dashboard } from '../Dashboard.jsx'
@@ -180,7 +180,11 @@ describe('Dashboard page', () => {
 
     renderDashboard()
 
-    // Button is present immediately — no need to wait for data
+    // Wait for pending state updates to settle to avoid React act() warning noise.
+    await act(async () => {
+      await Promise.resolve()
+    })
+
     expect(screen.getByRole('button', { name: 'New Review' })).toBeInTheDocument()
   })
 })

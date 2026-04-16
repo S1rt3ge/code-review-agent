@@ -9,7 +9,6 @@ Functions:
     _build_comment_body: Format findings into a PR comment markdown string.
 """
 
-import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -22,7 +21,7 @@ from sqlalchemy import select
 from backend.agents.orchestrator import run_graph
 from backend.services.ws_manager import ws_manager
 from backend.models.db_models import AgentExecution, Finding, Repository, Review, User
-from backend.services.code_extractor import CodeChunk, extract_chunks
+from backend.services.code_extractor import extract_chunks
 from backend.services.github_api import GitHubApiClient, get_github_client
 from backend.services.pr_commenter import build_comment
 from backend.services.result_aggregator import aggregate
@@ -40,7 +39,6 @@ def _try_decrypt_key(ciphertext: str | None) -> str | None:
         return decrypt_value(ciphertext)
     except Exception:
         return None
-
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +105,9 @@ async def _run_analysis_inner(session: AsyncSession, review_id: uuid.UUID) -> No
 
     repo_result = await session.get(Repository, review.repo_id)
     if repo_result is None:
-        raise ValueError(f"Repository {review.repo_id} not found for review {review_id}")
+        raise ValueError(
+            f"Repository {review.repo_id} not found for review {review_id}"
+        )
 
     logger.info(
         "Starting analysis for review %s (%s/%s #%d)",
@@ -244,7 +244,6 @@ async def _run_analysis_inner(session: AsyncSession, review_id: uuid.UUID) -> No
         )
 
 
-
 # ---------------------------------------------------------------------------
 # PR comment formatting
 # ---------------------------------------------------------------------------
@@ -307,7 +306,6 @@ async def _post_comment(
         )
 
 
-
 # ---------------------------------------------------------------------------
 # Error recovery helper
 # ---------------------------------------------------------------------------
@@ -359,5 +357,7 @@ def _estimate_cost(tokens_input: int, tokens_output: int) -> Decimal:
         Estimated cost as a Decimal rounded to 4 decimal places.
     """
     # Claude Opus 4.6 approximate: $15 / 1M input, $75 / 1M output
-    cost = Decimal(tokens_input) * Decimal("0.000015") + Decimal(tokens_output) * Decimal("0.000075")
+    cost = Decimal(tokens_input) * Decimal("0.000015") + Decimal(
+        tokens_output
+    ) * Decimal("0.000075")
     return round(cost, 4)

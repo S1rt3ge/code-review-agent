@@ -142,12 +142,14 @@ def build_comment(
     dup_count = len(findings) - total_non_dup
     footer_parts.append(f"{total_non_dup} finding{'s' if total_non_dup != 1 else ''}")
     if dup_count:
-        footer_parts.append(f"{dup_count} duplicate{'s' if dup_count != 1 else ''} hidden")
+        footer_parts.append(
+            f"{dup_count} duplicate{'s' if dup_count != 1 else ''} hidden"
+        )
     if estimated_cost is not None and estimated_cost > 0:
         footer_parts.append(f"~${estimated_cost:.4f}")
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    lines.append(f"---")
+    lines.append("---")
     lines.append(f"*{' · '.join(footer_parts)} · {now}*")
 
     return "\n".join(lines)

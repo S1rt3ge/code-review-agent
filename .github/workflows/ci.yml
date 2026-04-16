@@ -54,7 +54,12 @@ jobs:
           DATABASE_URL: postgresql://cra_user:cra_password@localhost:5432/cra_db
 
       - name: Run tests
-        run: pytest --tb=short -q
+        run: |
+          pytest -m "not integration" --tb=short -q
+          pytest -m integration --tb=short -q
+
+      - name: Run ruff
+        run: ruff check backend
 
       - name: Upload coverage report
         if: always()
@@ -88,4 +93,3 @@ jobs:
       - name: Run frontend tests
         run: npm test -- --run
         working-directory: frontend
-        continue-on-error: true

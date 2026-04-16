@@ -6,11 +6,10 @@ Covers:
 """
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
-from backend.agents import security_agent
 from backend.agents.security_agent import _parse_findings, run
 from backend.agents.llm_router import LLMConfig
 from backend.services.code_extractor import CodeChunk
@@ -47,18 +46,20 @@ def _make_config():
 
 
 def test_parse_findings_valid_json():
-    raw = json.dumps({
-        "findings": [
-            {
-                "finding_type": "sql_injection",
-                "severity": "critical",
-                "line_number": 5,
-                "message": "SQL injection via f-string",
-                "suggestion": "Use parameterised queries",
-                "code_snippet": "cursor.execute(f'SELECT * FROM users WHERE id={id}')",
-            }
-        ]
-    })
+    raw = json.dumps(
+        {
+            "findings": [
+                {
+                    "finding_type": "sql_injection",
+                    "severity": "critical",
+                    "line_number": 5,
+                    "message": "SQL injection via f-string",
+                    "suggestion": "Use parameterised queries",
+                    "code_snippet": "cursor.execute(f'SELECT * FROM users WHERE id={id}')",
+                }
+            ]
+        }
+    )
     chunk = _make_chunk()
     result = _parse_findings(raw, chunk)
     assert len(result) == 1
@@ -82,46 +83,52 @@ def test_parse_findings_invalid_json_returns_empty():
 
 
 def test_parse_findings_invalid_severity_skipped():
-    raw = json.dumps({
-        "findings": [
-            {
-                "finding_type": "xss",
-                "severity": "oops",  # invalid
-                "line_number": 1,
-                "message": "XSS",
-            }
-        ]
-    })
+    raw = json.dumps(
+        {
+            "findings": [
+                {
+                    "finding_type": "xss",
+                    "severity": "oops",  # invalid
+                    "line_number": 1,
+                    "message": "XSS",
+                }
+            ]
+        }
+    )
     chunk = _make_chunk()
     result = _parse_findings(raw, chunk)
     assert result == []
 
 
 def test_parse_findings_missing_required_field_skipped():
-    raw = json.dumps({
-        "findings": [
-            {
-                "finding_type": "injection",
-                # missing: severity, line_number, message
-            }
-        ]
-    })
+    raw = json.dumps(
+        {
+            "findings": [
+                {
+                    "finding_type": "injection",
+                    # missing: severity, line_number, message
+                }
+            ]
+        }
+    )
     chunk = _make_chunk()
     result = _parse_findings(raw, chunk)
     assert result == []
 
 
 def test_parse_findings_no_suggestion_allowed():
-    raw = json.dumps({
-        "findings": [
-            {
-                "finding_type": "hardcoded_secret",
-                "severity": "high",
-                "line_number": 3,
-                "message": "Hardcoded API key",
-            }
-        ]
-    })
+    raw = json.dumps(
+        {
+            "findings": [
+                {
+                    "finding_type": "hardcoded_secret",
+                    "severity": "high",
+                    "line_number": 3,
+                    "message": "Hardcoded API key",
+                }
+            ]
+        }
+    )
     chunk = _make_chunk()
     result = _parse_findings(raw, chunk)
     assert len(result) == 1
@@ -129,17 +136,19 @@ def test_parse_findings_no_suggestion_allowed():
 
 
 def test_parse_findings_code_snippet_truncated_at_500():
-    raw = json.dumps({
-        "findings": [
-            {
-                "finding_type": "injection",
-                "severity": "medium",
-                "line_number": 1,
-                "message": "msg",
-                "code_snippet": "x" * 600,
-            }
-        ]
-    })
+    raw = json.dumps(
+        {
+            "findings": [
+                {
+                    "finding_type": "injection",
+                    "severity": "medium",
+                    "line_number": 1,
+                    "message": "msg",
+                    "code_snippet": "x" * 600,
+                }
+            ]
+        }
+    )
     chunk = _make_chunk()
     result = _parse_findings(raw, chunk)
     assert len(result[0]["code_snippet"]) == 500
@@ -155,17 +164,19 @@ async def test_run_returns_findings():
     chunk = _make_chunk(content="password = 'hunter2'")
     config = _make_config()
 
-    response_payload = json.dumps({
-        "findings": [
-            {
-                "finding_type": "hardcoded_secret",
-                "severity": "high",
-                "line_number": 1,
-                "message": "Hardcoded password",
-                "suggestion": "Use environment variable",
-            }
-        ]
-    })
+    response_payload = json.dumps(
+        {
+            "findings": [
+                {
+                    "finding_type": "hardcoded_secret",
+                    "severity": "high",
+                    "line_number": 1,
+                    "message": "Hardcoded password",
+                    "suggestion": "Use environment variable",
+                }
+            ]
+        }
+    )
 
     mock_call_llm = AsyncMock(return_value=(response_payload, 100, 50))
 
@@ -208,19 +219,25 @@ async def test_run_multiple_chunks_aggregates():
     config = _make_config()
 
     def make_resp(filename):
-        return json.dumps({
-            "findings": [{
-                "finding_type": "test",
-                "severity": "low",
-                "line_number": 1,
-                "message": f"issue in {filename}",
-            }]
-        })
+        return json.dumps(
+            {
+                "findings": [
+                    {
+                        "finding_type": "test",
+                        "severity": "low",
+                        "line_number": 1,
+                        "message": f"issue in {filename}",
+                    }
+                ]
+            }
+        )
 
-    mock_call_llm = AsyncMock(side_effect=[
-        (make_resp("a.py"), 50, 20),
-        (make_resp("b.py"), 50, 20),
-    ])
+    mock_call_llm = AsyncMock(
+        side_effect=[
+            (make_resp("a.py"), 50, 20),
+            (make_resp("b.py"), 50, 20),
+        ]
+    )
 
     result = await run(chunks=[chunk1, chunk2], config=config, call_llm=mock_call_llm)
 

@@ -5,7 +5,11 @@ On Linux/macOS the default event loop is already selector-based.
 """
 
 import asyncio
+import os
 import sys
+
+
+os.environ.setdefault("APP_ENV", "test")
 
 
 def pytest_configure(config):

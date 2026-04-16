@@ -137,7 +137,9 @@ class TestCreateRepository:
             github_repo_name="hello-world",
         )
 
-        with patch("backend.routers.repositories.RepositoryResponse.model_validate") as mv:
+        with patch(
+            "backend.routers.repositories.RepositoryResponse.model_validate"
+        ) as mv:
             mv.return_value = MagicMock(
                 id=new_repo.id,
                 github_repo_owner="octocat",
@@ -170,9 +172,7 @@ class TestCreateRepository:
         )
 
         with pytest.raises(HTTPException) as exc_info:
-            await create_repository(
-                payload=payload, session=session, current_user=user
-            )
+            await create_repository(payload=payload, session=session, current_user=user)
 
         assert exc_info.value.status_code == 409
         assert "already configured" in exc_info.value.detail
@@ -192,9 +192,11 @@ class TestUpdateRepository:
 
         payload = _UpdateRepositoryRequest(enabled=False)
 
-        with patch("backend.routers.repositories.RepositoryResponse.model_validate") as mv:
+        with patch(
+            "backend.routers.repositories.RepositoryResponse.model_validate"
+        ) as mv:
             mv.return_value = MagicMock(enabled=False)
-            result = await update_repository(
+            await update_repository(
                 repo_id=repo.id,
                 payload=payload,
                 session=session,
@@ -236,9 +238,7 @@ class TestDeleteRepository:
         repo = _make_repo(user.id)
         session = _make_session(scalar_result=repo)
 
-        await delete_repository(
-            repo_id=repo.id, session=session, current_user=user
-        )
+        await delete_repository(repo_id=repo.id, session=session, current_user=user)
 
         session.delete.assert_awaited_once_with(repo)
         session.flush.assert_awaited_once()
@@ -262,7 +262,6 @@ class TestDeleteRepository:
         """A repo owned by a different user should look like 404 to the requester."""
         from fastapi import HTTPException
 
-        owner_user = _make_user()
         requester = _make_user()  # different user
         # The DB query filters by user_id so it returns None for wrong owner
         session = _make_session(scalar_result=None)
