@@ -18,12 +18,14 @@ Use this checklist when bootstrapping a new environment or auditing repo control
   - [ ] `CI / Frontend Build`
 - [ ] Secret scanning alerts are enabled.
 - [ ] Dependency security alerts are enabled.
+- [ ] Repository Actions secret `FERNET_KEY` is configured.
 
 ## Runtime and secrets hygiene
 
 - [ ] Production `JWT_SECRET` is non-default.
 - [ ] Production secrets are stored in provider secret manager (not plaintext env files in repo).
 - [ ] Sentry DSN configured for production.
+- [ ] Secrets/env policy reviewed: `docs/secrets-and-env-policy.md`.
 
 ## Evidence
 
