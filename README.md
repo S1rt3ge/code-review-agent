@@ -309,6 +309,12 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 - Incident response runbook: `docs/incident-response-runbook.md`
 - Issue templates: `.github/ISSUE_TEMPLATE/`
 
+### Release process
+
+- Changelog: `CHANGELOG.md`
+- Release checklist: `docs/release-checklist.md`
+- Manual release workflow: `.github/workflows/release.yml`
+
 ---
 
 ## License
