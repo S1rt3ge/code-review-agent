@@ -311,6 +311,7 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 
 - Security reporting policy: `SECURITY.md`
 - Incident response runbook: `docs/incident-response-runbook.md`
+- Alert thresholds baseline: `docs/alerting-baseline.md`
 - Issue templates: `.github/ISSUE_TEMPLATE/`
 - Secrets/env policy: `docs/secrets-and-env-policy.md`
 

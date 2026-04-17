@@ -18,12 +18,14 @@ This runbook covers detection, containment, recovery, and postmortem for product
    - CI deployment history
    - Sentry spikes/errors
    - DB availability and connection pool saturation
+   - Queue metrics (`oldest_pending_age_seconds`, `stale_running_count`, `error_count`)
 
 ## Containment actions
 
 - If webhook storm or queue overload:
   - Temporarily disable repository integration for noisy repos.
   - Scale down analysis concurrency by adjusting queue settings.
+  - Use `/health` and dashboard queue metrics to confirm backlog is draining.
 - If auth/security anomaly:
   - Rotate affected credentials/secrets.
   - Revoke compromised API tokens.
