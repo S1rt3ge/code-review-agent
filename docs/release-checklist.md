@@ -15,8 +15,9 @@ Use this checklist for every release to `main` and production deployment.
 
 - [ ] Select version tag (e.g. `v0.3.0`).
 - [ ] Ensure tag points to the exact commit intended for release.
-- [ ] Confirm target commit has successful required checks before tagging.
+- [ ] Confirm target commit has successful required check-runs (`Security Gates`, `SBOM`, `Backend Tests`, `Frontend Build`) before tagging.
 - [ ] Confirm release notes summary (highlights, breaking changes, migration notes).
+- [ ] Confirm `CHANGELOG.md` has meaningful `[Unreleased]` notes to roll into the release.
 
 ## 3) Deployment prep
 

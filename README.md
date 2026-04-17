@@ -325,6 +325,7 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 - Changelog: `CHANGELOG.md`
 - Release checklist: `docs/release-checklist.md`
 - Manual release workflow: `.github/workflows/release.yml`
+- Release workflow now blocks if required check-runs are not green or `CHANGELOG.md` lacks `[Unreleased]` release notes.
 
 ### Python dependencies (locked)
 
