@@ -296,6 +296,7 @@ class DashboardStatsResponse(BaseModel):
     avg_review_time_seconds: float = 0.0
     tokens_used_this_month: int = 0
     estimated_cost_this_month: Decimal = Decimal("0")
+    queue_metrics: dict[str, int | float | None] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -435,3 +436,4 @@ class HealthResponse(BaseModel):
     status: str
     environment: str
     database: str
+    queue: dict[str, int | float | None] = Field(default_factory=dict)
