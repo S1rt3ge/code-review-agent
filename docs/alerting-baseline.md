@@ -36,6 +36,17 @@ This document defines the minimum production alerts for the current system.
   - login/dashboard/review flow errors => **SEV-2**
   - isolated settings/retryable UX issues => **SEV-3**
 
+## Email delivery alerts
+
+### Production email send failure
+
+- Trigger when `EmailDeliveryError` occurs in production.
+- Severity: **SEV-2** if it blocks registration or verification, **SEV-3** for resend/reset-only failures.
+- Expected action:
+  - verify SMTP configuration
+  - confirm provider availability
+  - check recent secret rotation or expired credentials
+
 ## Health endpoint interpretation
 
 - `/health.status == ok`

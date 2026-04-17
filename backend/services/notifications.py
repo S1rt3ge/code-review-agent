@@ -13,6 +13,25 @@ from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
+_NON_PROD_ENVS = {"development", "dev", "local", "test", "testing"}
+
+
+class EmailDeliveryError(RuntimeError):
+    """Raised when email delivery is required but cannot be completed."""
+
+
+def _smtp_is_configured() -> bool:
+    """Return True when SMTP host is configured for real delivery."""
+    return bool(settings.smtp_host)
+
+
+def _email_fallback_allowed() -> bool:
+    """Return True when logging-only fallback is acceptable."""
+    return (
+        settings.app_env.lower() in _NON_PROD_ENVS
+        or not settings.smtp_required_in_production
+    )
+
 
 def _send_email_sync(to_email: str, subject: str, body: str) -> None:
     """Blocking SMTP send helper executed in a worker thread."""
@@ -22,16 +41,28 @@ def _send_email_sync(to_email: str, subject: str, body: str) -> None:
     msg["Subject"] = subject
     msg.set_content(body)
 
-    if not settings.smtp_host:
-        logger.info("[email-fallback] to=%s subject=%s\n%s", to_email, subject, body)
-        return
+    if not _smtp_is_configured():
+        if _email_fallback_allowed():
+            logger.info(
+                "[email-fallback] to=%s subject=%s\n%s", to_email, subject, body
+            )
+            return
+        logger.error(
+            "Email delivery unavailable in %s: SMTP_HOST is not configured",
+            settings.app_env,
+        )
+        raise EmailDeliveryError("SMTP is required in production but not configured")
 
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
-        if settings.smtp_use_tls:
-            smtp.starttls()
-        if settings.smtp_user and settings.smtp_password:
-            smtp.login(settings.smtp_user, settings.smtp_password)
-        smtp.send_message(msg)
+    try:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
+            if settings.smtp_use_tls:
+                smtp.starttls()
+            if settings.smtp_user and settings.smtp_password:
+                smtp.login(settings.smtp_user, settings.smtp_password)
+            smtp.send_message(msg)
+    except Exception as exc:
+        logger.error("Email delivery failed to %s: %s", to_email, exc)
+        raise EmailDeliveryError(f"Email delivery failed: {exc}") from exc
 
 
 async def send_email(to_email: str, subject: str, body: str) -> None:

@@ -24,6 +24,7 @@ Core production secrets:
 - `JWT_SECRET` (must be non-default)
 - `GITHUB_WEBHOOK_SECRET`
 - `FERNET_KEY`
+- `SMTP_HOST` / `SMTP_FROM` / `SMTP_PASSWORD` (if auth flows use email delivery)
 
 Integration/API secrets (if used):
 
@@ -55,3 +56,4 @@ Integration/API secrets (if used):
 - [ ] Required CI checks configured and passing.
 - [ ] `FERNET_KEY` exists in GitHub Actions secrets.
 - [ ] Runtime secrets configured in deployment platform.
+- [ ] SMTP configured for production, or `SMTP_REQUIRED_IN_PRODUCTION=false` explicitly documented as an accepted exception.
