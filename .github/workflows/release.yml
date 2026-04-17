@@ -47,10 +47,38 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           SHA=$(git rev-parse HEAD)
-          echo "Checking statuses for commit $SHA"
-          STATE=$(gh api "repos/${{ github.repository }}/commits/$SHA/status" --jq '.state')
-          if [[ "$STATE" != "success" ]]; then
-            echo "Required status checks are not all successful for $SHA (state=$STATE)"
+          echo "Checking required check-runs for commit $SHA"
+          REQUIRED_CHECKS=(
+            "Security Gates"
+            "SBOM"
+            "Backend Tests (Python 3.12)"
+            "Frontend Build"
+          )
+
+          CHECK_RUNS=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs")
+
+          for CHECK_NAME in "${REQUIRED_CHECKS[@]}"; do
+            CONCLUSION=$(printf '%s' "$CHECK_RUNS" | jq -r --arg NAME "$CHECK_NAME" '.check_runs[] | select(.name == $NAME) | .conclusion' | head -n 1)
+            STATUS=$(printf '%s' "$CHECK_RUNS" | jq -r --arg NAME "$CHECK_NAME" '.check_runs[] | select(.name == $NAME) | .status' | head -n 1)
+            if [[ -z "$STATUS" ]]; then
+              echo "Required check '$CHECK_NAME' is missing on commit $SHA"
+              exit 1
+            fi
+            if [[ "$STATUS" != "completed" || "$CONCLUSION" != "success" ]]; then
+              echo "Required check '$CHECK_NAME' is not successful (status=$STATUS conclusion=$CONCLUSION)"
+              exit 1
+            fi
+          done
+
+      - name: Ensure changelog contains unreleased release notes
+        run: |
+          if ! grep -q '^## \[Unreleased\]' CHANGELOG.md; then
+            echo "CHANGELOG.md must contain an [Unreleased] section"
+            exit 1
+          fi
+
+          if ! awk 'BEGIN { found=0; content=0 } /^## \[Unreleased\]/{ found=1; next } /^## \[/{ if (found) exit } found && NF { content=1 } END { exit(content ? 0 : 1) }' CHANGELOG.md; then
+            echo "CHANGELOG.md [Unreleased] section must contain release notes before tagging"
             exit 1
           fi
 
