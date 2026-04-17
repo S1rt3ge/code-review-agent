@@ -284,6 +284,9 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 - `POST /api/reviews/{id}/analyze` and GitHub webhook events enqueue durable jobs instead of raw in-process tasks.
 - A worker loop starts with the app and processes due jobs with retry/backoff.
 - Queue stale-lock recovery returns orphaned `running` jobs to `pending` for retry.
+- Queue observability is exposed via:
+  - `/health` -> `queue`
+  - `/api/dashboard/stats` -> `queue_metrics`
 
 ### CI security gates
 

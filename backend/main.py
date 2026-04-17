@@ -153,10 +153,13 @@ async def health_check() -> HealthResponse:
     except Exception as e:
         logger.warning(f"Health check DB probe failed: {e}")
 
+    queue_metrics = await analysis_queue.get_queue_metrics()
+
     return HealthResponse(
         status="ok",
         environment=settings.app_env,
         database=db_status,
+        queue=queue_metrics,
     )
 
 

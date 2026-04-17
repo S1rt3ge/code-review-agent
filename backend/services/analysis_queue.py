@@ -122,6 +122,61 @@ async def inflight_analyses() -> int:
         return int(result.scalar_one() or 0)
 
 
+async def get_queue_metrics() -> dict[str, int | float | None]:
+    """Return operational metrics for the durable analysis queue."""
+    now = datetime.now(timezone.utc)
+
+    async with async_session_factory() as session:
+        counts_result = await session.execute(
+            select(
+                AnalysisJob.status,
+                func.count(AnalysisJob.id),
+            ).group_by(AnalysisJob.status)
+        )
+        counts = {row[0]: int(row[1]) for row in counts_result.all()}
+
+        oldest_pending_result = await session.execute(
+            select(func.min(AnalysisJob.created_at)).where(
+                AnalysisJob.status == "pending"
+            )
+        )
+        oldest_pending_created_at = oldest_pending_result.scalar_one_or_none()
+
+        retries_result = await session.execute(
+            select(func.coalesce(func.sum(AnalysisJob.attempts), 0))
+        )
+        retry_count = int(retries_result.scalar_one() or 0)
+
+        stale_running_cutoff = now - timedelta(
+            seconds=settings.analysis_queue_stale_lock_seconds
+        )
+        stale_running_result = await session.execute(
+            select(func.count(AnalysisJob.id)).where(
+                AnalysisJob.status == "running",
+                AnalysisJob.locked_at.is_not(None),
+                AnalysisJob.locked_at < stale_running_cutoff,
+            )
+        )
+        stale_running_count = int(stale_running_result.scalar_one() or 0)
+
+    oldest_pending_age_seconds: float | None = None
+    if oldest_pending_created_at is not None:
+        oldest_pending_age_seconds = max(
+            0.0,
+            (now - oldest_pending_created_at).total_seconds(),
+        )
+
+    return {
+        "pending_count": counts.get("pending", 0),
+        "running_count": counts.get("running", 0),
+        "error_count": counts.get("error", 0),
+        "done_count": counts.get("done", 0),
+        "retry_count": retry_count,
+        "stale_running_count": stale_running_count,
+        "oldest_pending_age_seconds": oldest_pending_age_seconds,
+    }
+
+
 async def _worker_loop() -> None:
     """Poll pending jobs and process them one by one."""
     while True:

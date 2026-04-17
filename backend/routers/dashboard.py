@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.db_models import Finding, Review, User
 from backend.models.schemas import DashboardStatsResponse
+from backend.services.analysis_queue import get_queue_metrics
 from backend.utils.auth import get_current_user
 from backend.utils.database import get_db
 
@@ -81,9 +82,7 @@ async def get_dashboard_stats(
         .group_by(Finding.agent_name)
     )
     agent_result = await session.execute(agent_stmt)
-    findings_by_agent: dict[str, int] = {
-        row[0]: row[1] for row in agent_result.all()
-    }
+    findings_by_agent: dict[str, int] = {row[0]: row[1] for row in agent_result.all()}
 
     # Top issue types (top 10)
     top_stmt = (
@@ -124,6 +123,7 @@ async def get_dashboard_stats(
     monthly_row = monthly_result.one()
     tokens_used: int = int(monthly_row[0])
     cost_this_month: Decimal = Decimal(str(monthly_row[1]))
+    queue_metrics = await get_queue_metrics()
 
     return DashboardStatsResponse(
         total_reviews=total_reviews,
@@ -134,4 +134,5 @@ async def get_dashboard_stats(
         avg_review_time_seconds=avg_review_time,
         tokens_used_this_month=tokens_used,
         estimated_cost_this_month=cost_this_month,
+        queue_metrics=queue_metrics,
     )
