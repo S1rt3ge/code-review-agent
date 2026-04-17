@@ -37,6 +37,8 @@ Use this checklist for every release to `main` and production deployment.
 ## 5) Post-release
 
 - [ ] Monitor Sentry and runtime metrics for 30+ minutes.
+- [ ] Confirm `/health` stays `ok` (not `degraded`) after rollout.
+- [ ] Confirm queue metrics stay within alert thresholds.
 - [ ] Announce release and notable changes.
 - [ ] Create follow-up issues for any deferred work.
 

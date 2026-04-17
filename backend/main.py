@@ -155,8 +155,19 @@ async def health_check() -> HealthResponse:
 
     queue_metrics = await analysis_queue.get_queue_metrics()
 
+    queue_degraded = (
+        queue_metrics.get("stale_running_count", 0) > 0
+        or (
+            queue_metrics.get("oldest_pending_age_seconds") is not None
+            and queue_metrics["oldest_pending_age_seconds"] > 300
+        )
+        or queue_metrics.get("error_count", 0) > 0
+    )
+
+    overall_status = "degraded" if db_status != "connected" or queue_degraded else "ok"
+
     return HealthResponse(
-        status="ok",
+        status=overall_status,
         environment=settings.app_env,
         database=db_status,
         queue=queue_metrics,
