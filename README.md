@@ -315,6 +315,11 @@ Interactive docs with request/response schemas: **http://localhost:8000/docs**
 - Issue templates: `.github/ISSUE_TEMPLATE/`
 - Secrets/env policy: `docs/secrets-and-env-policy.md`
 
+### Email delivery behavior
+
+- In `development`/`test`, missing SMTP falls back to logged email links.
+- In production-like environments, missing/broken SMTP raises delivery errors unless `SMTP_REQUIRED_IN_PRODUCTION=false` is explicitly set.
+
 ### Release process
 
 - Changelog: `CHANGELOG.md`

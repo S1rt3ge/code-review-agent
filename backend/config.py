@@ -156,6 +156,10 @@ class Settings(BaseSettings):
     smtp_password: str | None = Field(default=None, alias="SMTP_PASSWORD")
     smtp_use_tls: bool = Field(default=True, alias="SMTP_USE_TLS")
     smtp_from: str = Field(default="noreply@code-review-agent.local", alias="SMTP_FROM")
+    smtp_required_in_production: bool = Field(
+        default=True,
+        alias="SMTP_REQUIRED_IN_PRODUCTION",
+    )
 
     # Realtime fan-out (optional). If unset, WebSocket updates are local-only.
     redis_url: str | None = Field(default=None, alias="REDIS_URL")

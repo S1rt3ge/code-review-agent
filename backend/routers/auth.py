@@ -32,6 +32,7 @@ from backend.models.schemas import (
     UserResponse,
 )
 from backend.services.notifications import (
+    EmailDeliveryError,
     build_email_verification_email,
     build_password_reset_email,
     send_email,
@@ -127,7 +128,18 @@ async def register(
     subject, body = build_email_verification_email(verification_link)
     try:
         await send_email(user.email, subject, body)
-    except Exception as exc:  # pragma: no cover - best-effort side effect
+    except EmailDeliveryError as exc:
+        if settings.app_env.lower() not in {
+            "development",
+            "dev",
+            "local",
+            "test",
+            "testing",
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unable to send verification email right now. Please try again later.",
+            ) from exc
         logger.warning("Failed to send verification email to %s: %s", user.email, exc)
 
     logger.info("Registered new user %s (%s)", user.username, user.email)
@@ -229,8 +241,8 @@ async def request_password_reset(
 
     try:
         await send_email(user.email, subject, body)
-    except Exception as exc:  # pragma: no cover - best-effort side effect
-        logger.warning("Failed to send password reset email to %s: %s", user.email, exc)
+    except EmailDeliveryError as exc:
+        logger.error("Failed to send password reset email to %s: %s", user.email, exc)
 
     return MessageResponse(message=generic_message)
 
@@ -305,8 +317,8 @@ async def request_email_verification(
 
     try:
         await send_email(user.email, subject, body)
-    except Exception as exc:  # pragma: no cover - best-effort side effect
-        logger.warning("Failed to send verification email to %s: %s", user.email, exc)
+    except EmailDeliveryError as exc:
+        logger.error("Failed to send verification email to %s: %s", user.email, exc)
 
     return MessageResponse(message=generic_message)
 
