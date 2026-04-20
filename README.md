@@ -1,344 +1,323 @@
 # AI Code Review Agent
 
-Automatically reviews GitHub Pull Requests using four specialized AI agents running in parallel. Findings are posted back as a structured PR comment and visualized in a React dashboard.
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white) ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-queue%20backed-4169E1?logo=postgresql&logoColor=white) ![GitHub Actions](https://img.shields.io/badge/CI-security%20gated-2088FF?logo=githubactions&logoColor=white) ![License](https://img.shields.io/badge/License-MIT-green)
 
-![Python](https://img.shields.io/badge/Python-3.12-blue) ![React](https://img.shields.io/badge/React-19-61dafb) ![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688) ![Tests](https://img.shields.io/badge/backend_tests-148_passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
+A production-oriented full-stack application that reviews GitHub pull requests using multiple specialized AI agents running in parallel.
 
----
+The system ingests PR events, extracts code diffs, routes them through dedicated review agents (security, performance, style, logic), aggregates findings, and surfaces results through both GitHub PR comments and a real-time web dashboard.
 
-## How it works
+This project was built as an end-to-end engineering exercise in backend architecture, async workflows, frontend UX, CI/CD hardening, operational reliability, and AI-assisted developer tooling.
 
+## Key Engineering Wins
+
+- Built a **durable database-backed analysis queue** with retry, stale-lock recovery, and health diagnostics instead of transient in-memory background tasks.
+- Implemented a **multi-agent review pipeline** that separates security, performance, style, and logic concerns while aggregating results into a single developer-facing output.
+- Hardened the project with **rate limiting, release gates, secret scanning, dependency audits, SBOM generation, branch protection, and governance policies**.
+- Delivered a **full-stack authenticated product flow** with JWT auth, email verification, password reset, encrypted settings storage, and real-time WebSocket progress.
+
+## Highlights
+
+- Parallel multi-agent review with deduplicated result aggregation
+- Async FastAPI backend with PostgreSQL, JWT auth, and WebSocket progress updates
+- React dashboard for review history, settings, and real-time execution state
+- Durable database-backed analysis queue with retry, stale-lock recovery, and health diagnostics
+- GitHub webhook / PR comment integration
+- Production hardening across auth, CI, release gating, dependency hygiene, and governance
+
+## Product Overview
+
+At a high level, the application behaves like an automated AI reviewer that sits inside a normal GitHub-based pull request workflow:
+
+1. A pull request is opened or updated.
+2. GitHub sends a webhook event to the backend.
+3. A review record is created and queued for durable background processing.
+4. Code diffs are chunked and analyzed by multiple domain-specific agents in parallel.
+5. Findings are deduplicated, ranked, and stored.
+6. Results are exposed in the dashboard and can be posted back to the PR as a structured comment.
+
+## Architecture
+
+```text
+GitHub Pull Request Event
+        |
+        v
+FastAPI Webhook Receiver
+        |
+        v
+Review + Analysis Job Created
+        |
+        v
+Durable Analysis Queue (DB-backed)
+        |
+        v
+LangGraph-style Orchestrator
+        |
+        +--> Security Agent
+        +--> Performance Agent
+        +--> Style Agent
+        +--> Logic Agent
+        |
+        v
+Result Aggregation + Persistence
+        |
+        +--> Dashboard API / WebSocket updates
+        +--> GitHub PR comment publishing
 ```
-GitHub PR opened
-       │
-       ▼
-POST /api/github/webhook  (HMAC-SHA256 verified)
-       │
-       ▼
-FastAPI creates Review record, returns 202
-       │
-       ▼  (background task)
-LangGraph Orchestrator
-       │
-       ├──► Security Agent  ─┐
-       ├──► Performance Agent─┤  (parallel, 30s timeout each)
-       ├──► Style Agent     ─┤
-       └──► Logic Agent     ─┘
-                              │
-                              ▼
-                    Result Aggregator
-                    (dedup + severity sort)
-                              │
-                    ┌─────────┴──────────┐
-                    ▼                    ▼
-             Dashboard UI         PR Comment posted
-          (real-time via WS)      to GitHub
+
+## Core Capabilities
+
+### Multi-agent AI review
+
+The backend runs several specialized review agents in parallel, each focused on a different concern:
+
+| Agent | Focus |
+|---|---|
+| Security | Injection, secret exposure, auth flaws, insecure patterns |
+| Performance | N+1 patterns, expensive loops, avoidable copies, scaling risks |
+| Style | Naming, readability, consistency, maintainability issues |
+| Logic | Boundary conditions, null handling, type mismatches, correctness bugs |
+
+### Durable background processing
+
+Instead of relying on fire-and-forget in-memory tasks, review execution is backed by a durable `analysis_jobs` queue in the database.
+
+This includes:
+
+- queued job persistence
+- retries with backoff
+- stale lock recovery
+- queue health metrics
+- startup recovery for interrupted work
+
+### Real-time user feedback
+
+The frontend subscribes to review progress through WebSockets so users can see analysis state changes while the backend processes a review.
+
+### Auth and account lifecycle
+
+The application supports a complete authenticated user flow:
+
+- registration
+- login via JWT
+- email verification
+- password reset
+- verified-email enforcement for protected access
+
+### GitHub integration
+
+The system is designed to operate as part of a GitHub PR workflow, including:
+
+- webhook validation
+- repository linkage
+- PR-triggered review creation
+- optional PR comment publishing with findings
+
+## Engineering Focus Areas
+
+This project intentionally goes beyond a prototype and includes engineering concerns that are often missing from demo applications.
+
+### Reliability
+
+- Durable queue instead of transient in-process background work
+- Stale job recovery for long-running tasks
+- Startup recovery for interrupted review state
+- Degraded health signaling when queue risk thresholds are exceeded
+
+### Security
+
+- Auth rate limiting
+- Webhook signature validation
+- Encrypted key storage with Fernet
+- Production guardrail for default JWT secret
+- Explicit production email delivery behavior
+- Secret scanning and dependency audit gates in CI
+
+### Observability
+
+- Sentry integration hooks
+- Queue diagnostics via `/health` and dashboard stats
+- Alerting baseline for backlog, stale jobs, and runtime exceptions
+
+### Delivery discipline
+
+- Locked Python dependency workflow using `pip-tools`
+- Deterministic frontend installs without `--legacy-peer-deps`
+- Release checklist and release workflow with gating checks
+- SBOM generation in CI
+- Branch protection, CODEOWNERS, and governance documentation
+
+## Tech Stack
+
+### Backend
+
+- Python 3.12
+- FastAPI
+- SQLAlchemy (async)
+- PostgreSQL
+- SlowAPI
+- JWT auth
+- Sentry SDK
+
+### Frontend
+
+- React 19
+- Vite 8
+- JavaScript with JSDoc typing
+- Tailwind CSS 4
+- Zustand
+- Vitest + Testing Library
+
+### AI / orchestration
+
+- Multi-agent orchestration pattern inspired by LangGraph-style execution
+- model/provider routing abstraction
+- support for hosted and local model execution paths
+
+### Tooling / Ops
+
+- Docker / Docker Compose
+- GitHub Actions
+- Dependabot
+- Gitleaks
+- pip-audit / npm audit
+- CycloneDX SBOM generation
+
+## Repository Structure
+
+```text
+backend/
+  agents/         # AI review agent implementations and orchestration
+  routers/        # API endpoints
+  services/       # queueing, GitHub, aggregation, notifications, extraction
+  models/         # ORM models and API schemas
+  utils/          # auth, crypto, DB, rate limiting, helpers
+
+frontend/
+  src/
+    pages/        # route-level screens
+    components/   # reusable UI pieces
+    hooks/        # API / websocket / settings hooks
+    store/        # Zustand state
+
+supabase/migrations/
+  SQL schema and incremental database migrations
+
+.github/
+  workflows/      # CI, release, PR labeling
+  CODEOWNERS
+  ISSUE_TEMPLATE/
 ```
 
-**Four agents, each focused on one concern:**
+## Selected Implementation Details
 
-| Agent | Finds |
-|---|---|
-| Security | SQL injection, XSS, hardcoded secrets, weak crypto, auth bypass |
-| Performance | N+1 queries, O(n²) loops, memory leaks, large unnecessary copies |
-| Style | Naming conventions, line length, missing docstrings, unused imports |
-| Logic | Off-by-one errors, null dereferences, type mismatches, boundary bugs |
+### Queue health model
 
----
+The queue layer exposes operational metrics such as:
 
-## Features
+- pending job count
+- running job count
+- error job count
+- retry count
+- stale running job count
+- oldest pending age
 
-- Parallel agent execution with per-agent timeouts
-- Multi-LLM support: Claude Opus 4.6 (primary), GPT (fallback), Ollama (local/private)
-- Real-time WebSocket progress updates while analysis runs
-- GitHub App integration — webhook trigger + automatic PR comments
-- React dashboard with review history, findings table, and per-agent stats
-- JWT authentication, encrypted API key storage (Fernet)
-- 148 backend tests + 30 frontend tests
+These metrics are surfaced through:
 
----
+- `/health`
+- `/api/dashboard/stats`
 
-## Tech stack
+### Release workflow
 
-| Layer | Technology |
-|---|---|
-| Backend | Python 3.12, FastAPI, LangGraph, SQLAlchemy (async) |
-| Database | PostgreSQL 16 |
-| Frontend | React 19, JavaScript + JSDoc, TailwindCSS, Zustand |
-| LLMs | Claude Opus 4.6, OpenAI GPT, Ollama (Qwen2.5-Coder) |
-| Auth | JWT (HS256), Fernet encryption for stored keys |
-| Infrastructure | Docker, docker-compose |
+The manual release workflow validates:
 
----
+- semantic version format
+- target branch correctness
+- required check-runs are green
+- changelog has non-empty unreleased notes
 
-## Quick start
+### Cross-platform Python dependency strategy
+
+The project uses:
+
+- `requirements.in` as the source spec
+- `requirements.txt` as the canonical locked runtime dependency set
+- `requirements-dev-windows.in` as a Windows-specific local development overlay
+
+This keeps CI/runtime deterministic while still allowing local development on Windows.
+
+## Local Development
 
 ### Prerequisites
 
-- Docker + Docker Compose
-- A GitHub account (for the App integration)
-- An Anthropic or OpenAI API key (optional — you can also use local Ollama)
+- Python 3.12
+- Node.js 20+
+- PostgreSQL (or Docker)
 
-### 1. Clone and configure
+### Backend
 
 ```bash
-git clone https://github.com/S1rt3ge/code-review-agent
-cd code-review-agent
-cp .env.example .env
+pip install -r requirements.txt -r requirements-dev-windows.in  # Windows local dev
+uvicorn backend.main:app --reload
 ```
 
-Open `.env` and set the required values:
+### Frontend
 
-```env
-# Required
-JWT_SECRET=any-long-random-string-change-this
-FERNET_KEY=<run: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())">
-
-# Optional but needed for real analysis
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-
-# Required for GitHub App integration
-GITHUB_APP_ID=123456
-GITHUB_APP_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----...
-GITHUB_WEBHOOK_SECRET=your-webhook-secret
+```bash
+cd frontend
+npm ci
+npm run dev
 ```
 
-### 2. Start everything
+### Docker
 
 ```bash
 docker compose up --build
 ```
 
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:5173 |
-| Backend API | http://localhost:8000 |
-| API docs (Swagger) | http://localhost:8000/docs |
-| pgAdmin | http://localhost:5050 |
+## Testing
 
-### 3. Create an account
-
-Open http://localhost:5173 and register. Or via curl:
+### Backend
 
 ```bash
-# Register
-curl -s -X POST http://localhost:8000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"you@example.com","username":"you","password":"YourPass123!"}'
-
-# Get a JWT token
-curl -s -X POST http://localhost:8000/api/auth/token \
-  -d "username=you@example.com&password=YourPass123!"
+pytest -m "not integration" --tb=short -q
+pytest -m integration --tb=short -q
 ```
 
----
-
-## GitHub App setup
-
-This is needed for the webhook trigger and for posting comments back to PRs.
-
-1. Go to https://github.com/settings/apps/new and create a new GitHub App:
-   - **Webhook URL:** `https://your-domain.com/api/github/webhook`
-   - **Permissions:** Pull requests → Read & Write, Contents → Read
-   - **Subscribe to events:** `pull_request`
-
-2. Generate a private key and download the `.pem` file.
-
-3. Add to your `.env`:
-   ```env
-   GITHUB_APP_ID=123456
-   GITHUB_APP_PRIVATE_KEY=<contents of .pem, with newlines replaced by \n>
-   GITHUB_WEBHOOK_SECRET=<the secret you set in the App settings>
-   ```
-
-4. Install the App on your repositories from the App's install page.
-
-Once installed, opening a PR on a connected repo automatically triggers a review.
-
----
-
-## Running tests
+### Frontend
 
 ```bash
-# All backend tests (requires running Postgres via docker compose)
-docker compose --profile test run --rm tests
-
-# Specific test file
-docker compose --profile test run --rm tests pytest backend/tests/test_integration.py -v
-
-# Frontend tests (no Docker needed)
-cd frontend && npm test -- --run
+cd frontend
+npm test -- --run
+npm run build
 ```
 
-**Current coverage:**
-- Backend: 148 tests — agents, services, auth, reviews, settings, dashboard, webhooks, integration
-- Frontend: 30 tests — components (StatusBadge, FindingsTable), store (auth), hooks (useApi)
+### CI gates
 
----
+The repository includes automated checks for:
 
-## Project structure
+- backend tests
+- frontend build
+- secret scanning
+- dependency auditing
+- SBOM generation
+- linting
 
-```
-code-review-agent/
-├── backend/
-│   ├── agents/
-│   │   ├── orchestrator.py        # LangGraph async dispatch (parallel)
-│   │   ├── security_agent.py
-│   │   ├── performance_agent.py
-│   │   ├── style_agent.py
-│   │   ├── logic_agent.py
-│   │   └── llm_router.py          # Claude / GPT / Ollama selection
-│   ├── routers/
-│   │   ├── auth.py                # register, token (OAuth2), /me
-│   │   ├── reviews.py             # CRUD + analyze + post-comment
-│   │   ├── settings.py            # LLM config, encrypted key storage
-│   │   ├── dashboard.py           # aggregate stats
-│   │   └── github.py              # webhook receiver
-│   ├── services/
-│   │   ├── analyzer.py            # background analysis runner
-│   │   ├── github_api.py          # GitHub App auth + REST calls
-│   │   ├── code_extractor.py      # unified diff → CodeChunk
-│   │   ├── result_aggregator.py   # dedup + severity ranking
-│   │   ├── pr_commenter.py        # markdown comment builder
-│   │   └── ws_manager.py          # WebSocket broadcast manager
-│   ├── models/
-│   │   ├── db_models.py           # SQLAlchemy ORM
-│   │   └── schemas.py             # Pydantic request/response schemas
-│   └── utils/
-│       ├── auth.py                # JWT + PBKDF2 password hashing
-│       ├── crypto.py              # Fernet encrypt/decrypt
-│       └── webhooks.py            # HMAC-SHA256 signature verification
-├── frontend/
-│   └── src/
-│       ├── pages/                 # Dashboard, ReviewDetail, Settings, Login
-│       ├── components/            # FindingsTable, AgentStatus, Navbar, StatusBadge
-│       ├── hooks/                 # useApi, useWebsocket, useSettings
-│       └── store/                 # Zustand: useAuthStore, useSettingsStore, useUiStore
-├── supabase/migrations/           # 001–005 SQL migrations (auto-applied by Postgres container)
-├── .github/workflows/ci.yml       # CI: backend tests + frontend build on push/PR
-├── Dockerfile                     # Multi-stage: Node build → Python runtime
-├── docker-compose.yml
-├── requirements.txt
-└── .env.example
-```
+## What This Project Demonstrates
 
----
+This repository is intentionally strong as a hiring portfolio project because it demonstrates more than feature implementation.
 
-## API reference
+It shows experience with:
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/api/auth/register` | — | Create account, returns JWT |
-| POST | `/api/auth/token` | — | Login (OAuth2 form), returns JWT |
-| POST | `/api/auth/password-reset/request` | — | Request password reset link |
-| POST | `/api/auth/password-reset/confirm` | — | Confirm reset token + set new password |
-| POST | `/api/auth/email-verification/request` | — | Resend email verification link |
-| POST | `/api/auth/email-verification/confirm` | — | Verify account email token |
-| GET | `/api/auth/me` | JWT | Current user profile |
-| GET | `/api/reviews` | JWT | List reviews (paginated) |
-| POST | `/api/reviews` | JWT | Create review manually |
-| GET | `/api/reviews/{id}` | JWT | Review detail + findings |
-| POST | `/api/reviews/{id}/analyze` | JWT | Trigger analysis |
-| POST | `/api/reviews/{id}/post-comment` | JWT | Post findings to GitHub PR |
-| GET | `/api/settings` | JWT | Get LLM config |
-| PUT | `/api/settings` | JWT | Update LLM config + API keys |
-| POST | `/api/settings/test-llm` | JWT | Test LLM connectivity |
-| GET | `/api/dashboard/stats` | JWT | Aggregate stats per user |
-| POST | `/api/github/webhook` | Signature | GitHub webhook receiver |
-| WS | `/ws/progress/{review_id}` | — | Real-time agent progress |
+- Designing async backend systems
+- Building full-stack authenticated products
+- Integrating external platforms such as GitHub
+- Orchestrating AI-driven workflows
+- Making systems production-capable through queueing, recovery, release gates, and operational docs
+- Improving developer experience through automation and governance
 
-Interactive docs with request/response schemas: **http://localhost:8000/docs**
+## Notes
 
----
-
-## Environment variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `DATABASE_URL` | Yes | `postgresql+psycopg://user:pass@host/db` |
-| `JWT_SECRET` | Yes | Secret for signing JWT tokens |
-| `FERNET_KEY` | Yes | Key for encrypting stored API keys |
-| `ANTHROPIC_API_KEY` | No | Claude API key (app-level fallback) |
-| `OPENAI_API_KEY` | No | OpenAI API key (app-level fallback) |
-| `OLLAMA_HOST` | No | Ollama base URL (default: `http://localhost:11434`) |
-| `GITHUB_APP_ID` | No | GitHub App ID |
-| `GITHUB_APP_PRIVATE_KEY` | No | GitHub App RSA private key |
-| `GITHUB_WEBHOOK_SECRET` | No | Webhook HMAC secret |
-| `CORS_ORIGINS` | No | Allowed origins (default: localhost dev ports) |
-| `FRONTEND_BASE_URL` | No | Base URL used in email links |
-| `SMTP_HOST` / `SMTP_PORT` | No | SMTP server settings for real email delivery |
-| `SMTP_USER` / `SMTP_PASSWORD` | No | SMTP auth credentials |
-| `SMTP_USE_TLS` / `SMTP_FROM` | No | SMTP security + sender |
-| `SENTRY_DSN` | No | Backend Sentry DSN |
-| `VITE_SENTRY_DSN` | No | Frontend Sentry DSN |
-| `REDIS_URL` | No | Optional Redis for multi-instance WS fan-out |
-| `ANALYSIS_QUEUE_*` | No | Durable analysis queue poll/retry tuning |
-
-> Security note: in non-dev environments (`APP_ENV` not development/local/test),
-> app startup is blocked if `JWT_SECRET` remains `change-me-in-production`.
-
-### Durable analysis queue
-
-- Analysis execution is now driven by a DB-backed `analysis_jobs` table.
-- `POST /api/reviews/{id}/analyze` and GitHub webhook events enqueue durable jobs instead of raw in-process tasks.
-- A worker loop starts with the app and processes due jobs with retry/backoff.
-- Queue stale-lock recovery returns orphaned `running` jobs to `pending` for retry.
-- Queue observability is exposed via:
-  - `/health` -> `queue`
-  - `/api/dashboard/stats` -> `queue_metrics`
-
-### CI security gates
-
-- CI now runs secret scanning (`gitleaks`) on repository history and diffs.
-- Backend dependency audit uses `pip-audit` (fails on known vulnerable packages).
-- Frontend dependency audit uses `npm audit --audit-level=critical`.
-- CI publishes SBOM artifacts for backend and frontend (`CycloneDX`: Python XML + frontend JSON).
-
-### Repository governance
-
-- Code ownership rules: `.github/CODEOWNERS`
-- Branch protection baseline: `docs/branch-protection-policy.md`
-- Governance audit checklist: `docs/governance-checklist.md`
-
-### Automation and release hygiene
-
-- Dependabot updates: `.github/dependabot.yml`
-- Automatic PR labeling: `.github/workflows/pr-labeler.yml` + `.github/labeler.yml`
-- PR release-note template: `.github/pull_request_template.md`
-
-### Security and incident response
-
-- Security reporting policy: `SECURITY.md`
-- Incident response runbook: `docs/incident-response-runbook.md`
-- Alert thresholds baseline: `docs/alerting-baseline.md`
-- Issue templates: `.github/ISSUE_TEMPLATE/`
-- Secrets/env policy: `docs/secrets-and-env-policy.md`
-
-### Email delivery behavior
-
-- In `development`/`test`, missing SMTP falls back to logged email links.
-- In production-like environments, missing/broken SMTP raises delivery errors unless `SMTP_REQUIRED_IN_PRODUCTION=false` is explicitly set.
-
-### Release process
-
-- Changelog: `CHANGELOG.md`
-- Release checklist: `docs/release-checklist.md`
-- Manual release workflow: `.github/workflows/release.yml`
-- Release workflow now blocks if required check-runs are not green or `CHANGELOG.md` lacks `[Unreleased]` release notes.
-
-### Python dependencies (locked)
-
-- Source spec: `requirements.in`
-- Canonical runtime lockfile: `requirements.txt` (generated with `pip-tools`)
-- Windows dev overlay: `requirements-dev-windows.in`
-- Refresh lockfile:
-  - `pip install pip-tools`
-  - `pip-compile --generate-hashes --strip-extras --allow-unsafe --output-file requirements.txt requirements.in`
-- Local Windows install:
-  - `pip install -r requirements.txt -r requirements-dev-windows.in`
-
----
+Some operational details in this repository are intentionally documented at a policy/process level rather than tied to any personal or private infrastructure. The goal is to show engineering quality and production thinking without exposing sensitive configuration or deployment specifics.
 
 ## License
 
