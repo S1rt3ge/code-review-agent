@@ -1,4 +1,4 @@
-import { render, screen, waitFor, act } from '@testing-library/react'
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { Dashboard } from '../Dashboard.jsx'
@@ -186,5 +186,30 @@ describe('Dashboard page', () => {
     })
 
     expect(screen.getByRole('button', { name: 'New Review' })).toBeInTheDocument()
+  })
+
+  it('renders repository owner/name in New Review selector', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(REVIEWS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        repositories: [{
+          id: 'repo-1',
+          github_repo_owner: 'octocat',
+          github_repo_name: 'hello-world',
+        }]
+      }), { status: 200 }))
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'New Review' })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'New Review' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'octocat/hello-world' })).toBeInTheDocument()
+    })
   })
 })

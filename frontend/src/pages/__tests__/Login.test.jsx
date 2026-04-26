@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { Login } from '../Login.jsx'
 import { useAuthStore } from '@/store/index.js'
 
@@ -9,6 +9,17 @@ function renderLogin() {
   return render(
     <MemoryRouter>
       <Login />
+    </MemoryRouter>
+  )
+}
+
+function renderLoginWithRedirectState() {
+  return render(
+    <MemoryRouter initialEntries={[{ pathname: '/login', state: { from: { pathname: '/reviews/rev-1' } } }]}>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/reviews/rev-1" element={<div>Review detail route</div>} />
+      </Routes>
     </MemoryRouter>
   )
 }
@@ -117,6 +128,25 @@ describe('Login page', () => {
 
     await waitFor(() => {
       expect(useAuthStore.getState().token).toBe('tok-123')
+    })
+  })
+
+  it('redirects back to intended route after successful login', async () => {
+    fetch
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: 'tok-123' }), { status: 200 })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'u1', email: 'a@b.com', plan: 'free' }), { status: 200 })
+      )
+
+    renderLoginWithRedirectState()
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'a@b.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'MyPass123!' } })
+    fireEvent.submit(screen.getByLabelText('Email').closest('form'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Review detail route')).toBeInTheDocument()
     })
   })
 

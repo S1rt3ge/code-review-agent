@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useAuthStore } from '@/store/index.js'
-
-const API_BASE_URL = '/api'
+import { apiUrl } from '@/config.js'
 
 /**
  * Hook providing typed API methods with shared loading and error state.
@@ -53,7 +52,7 @@ export function useApi() {
         options.body = JSON.stringify(body)
       }
 
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, options)
+      const response = await fetch(apiUrl(endpoint), options)
 
       if (!response.ok) {
         // Token expired or revoked — clear auth so ProtectedRoute redirects to login

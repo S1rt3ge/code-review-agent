@@ -13,6 +13,7 @@ Functions:
 
 import asyncio
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -24,12 +25,13 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from sqlalchemy import text
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+from sqlalchemy import select, text
 
 from backend.config import settings
+from backend.models.db_models import Review
 from backend.models.schemas import HealthResponse
 from backend.routers import auth, dashboard, github, repositories, reviews
 from backend.routers import settings as settings_router
@@ -37,6 +39,7 @@ from backend.services import analysis_queue
 from backend.services.ws_manager import ws_manager
 from backend.services.recovery import recover_stuck_reviews
 from backend.utils.database import async_session_factory, engine
+from backend.utils.auth import verify_review_ws_ticket
 from backend.utils.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
@@ -153,7 +156,13 @@ async def health_check() -> HealthResponse:
     except Exception as e:
         logger.warning(f"Health check DB probe failed: {e}")
 
-    queue_metrics = await analysis_queue.get_queue_metrics()
+    queue_metrics: dict[str, int | float | None] = {}
+    queue_probe_failed = False
+    try:
+        queue_metrics = await analysis_queue.get_queue_metrics()
+    except Exception as e:
+        queue_probe_failed = True
+        logger.warning("Health check queue probe failed: %s", e)
 
     queue_degraded = (
         queue_metrics.get("stale_running_count", 0) > 0
@@ -164,7 +173,9 @@ async def health_check() -> HealthResponse:
         or queue_metrics.get("error_count", 0) > 0
     )
 
-    overall_status = "degraded" if db_status != "connected" or queue_degraded else "ok"
+    overall_status = (
+        "degraded" if db_status != "connected" or queue_probe_failed or queue_degraded else "ok"
+    )
 
     return HealthResponse(
         status=overall_status,
@@ -195,6 +206,27 @@ async def websocket_progress(websocket: WebSocket, review_id: str) -> None:
         websocket: The WebSocket connection.
         review_id: UUID of the review being monitored.
     """
+    ticket = websocket.query_params.get("ticket")
+    if not ticket:
+        await websocket.close(code=1008)
+        return
+
+    try:
+        payload = verify_review_ws_ticket(ticket, review_id)
+        user_id = uuid.UUID(str(payload["sub"]))
+        review_uuid = uuid.UUID(review_id)
+    except Exception:
+        await websocket.close(code=1008)
+        return
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(Review.id).where(Review.id == review_uuid, Review.user_id == user_id)
+        )
+        if result.scalar_one_or_none() is None:
+            await websocket.close(code=1008)
+            return
+
     await ws_manager.connect(review_id, websocket)
     try:
         # Keep the connection alive; updates are pushed by the analyzer.

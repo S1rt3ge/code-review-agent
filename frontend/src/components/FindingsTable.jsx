@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 
 /**
- * @typedef {'critical'|'high'|'medium'|'low'|'info'} Severity
+ * @typedef {'critical'|'high'|'warning'|'medium'|'low'|'info'} Severity
  */
 
 /**
@@ -22,6 +22,7 @@ const SEVERITY_ORDER = { critical: 0, high: 1, warning: 1, medium: 2, low: 3, in
 const SEVERITY_BADGE_CLASSES = {
   critical: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
   high:     'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+  warning:  'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
   medium:   'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
   low:      'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
   info:     'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',

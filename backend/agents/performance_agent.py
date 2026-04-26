@@ -141,6 +141,8 @@ async def run(
     all_findings: list[dict] = []
     total_in = 0
     total_out = 0
+    failures = 0
+    last_error: str | None = None
 
     for chunk in chunks:
         prompt = _build_prompt(chunk)
@@ -155,6 +157,8 @@ async def run(
                 len(findings), chunk.filename, chunk.start_line, chunk.end_line,
             )
         except Exception as exc:
+            failures += 1
+            last_error = str(exc)
             logger.error(
                 "performance_agent: LLM call failed for %s: %s",
                 chunk.filename, exc, exc_info=True,
@@ -164,4 +168,9 @@ async def run(
         "performance_agent: %d total findings across %d chunks",
         len(all_findings), len(chunks),
     )
-    return {"findings": all_findings, "tokens_input": total_in, "tokens_output": total_out}
+    return {
+        "findings": all_findings,
+        "tokens_input": total_in,
+        "tokens_output": total_out,
+        "error_message": last_error if failures else None,
+    }

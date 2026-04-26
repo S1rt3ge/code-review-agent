@@ -1,10 +1,9 @@
-import { useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-
-const API_BASE = '/api'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { apiUrl } from '@/config.js'
 
 async function publicPost(endpoint, body) {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
+  const res = await fetch(apiUrl(endpoint), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -92,6 +91,7 @@ export function ForgotPassword() {
 
 export function ResetPassword() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const tokenFromUrl = useMemo(() => searchParams.get('token') || '', [searchParams])
   const [token, setToken] = useState(tokenFromUrl)
   const [newPassword, setNewPassword] = useState('')
@@ -99,6 +99,10 @@ export function ResetPassword() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (tokenFromUrl) navigate('/reset-password', { replace: true })
+  }, [navigate, tokenFromUrl])
 
   const handleSubmit = async e => {
     e.preventDefault()
@@ -183,11 +187,16 @@ export function ResetPassword() {
 
 export function VerifyEmail() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const tokenFromUrl = useMemo(() => searchParams.get('token') || '', [searchParams])
   const [token, setToken] = useState(tokenFromUrl)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (tokenFromUrl) navigate('/verify-email', { replace: true })
+  }, [navigate, tokenFromUrl])
 
   const handleSubmit = async e => {
     e.preventDefault()

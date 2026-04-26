@@ -109,6 +109,38 @@ def create_access_token(user_id: uuid.UUID, email: str) -> str:
     return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
 
 
+def create_review_ws_ticket(user_id: uuid.UUID, review_id: uuid.UUID) -> str:
+    """Create a short-lived ticket for one review progress WebSocket."""
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user_id),
+        "review_id": str(review_id),
+        "typ": "review_ws",
+        "exp": now + timedelta(minutes=5),
+        "iat": now,
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
+
+
+def verify_review_ws_ticket(ticket: str, expected_review_id: str) -> dict:
+    """Verify a WebSocket ticket and ensure it belongs to the requested review."""
+    credentials_exc = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate WebSocket ticket",
+    )
+    try:
+        payload = jwt.decode(ticket, settings.jwt_secret, algorithms=[ALGORITHM])
+    except JWTError as exc:
+        logger.debug("WS ticket decode failed: %s", exc)
+        raise credentials_exc
+
+    if payload.get("typ") != "review_ws" or payload.get("review_id") != expected_review_id:
+        raise credentials_exc
+    if not payload.get("sub"):
+        raise credentials_exc
+    return payload
+
+
 def verify_token(token: str) -> dict:
     """Decode and validate a JWT token.
 

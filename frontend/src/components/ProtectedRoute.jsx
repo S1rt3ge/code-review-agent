@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/index.js'
 
@@ -30,14 +31,20 @@ export function ProtectedRoute({ children }) {
   const clearAuth = useAuthStore(s => s.clearAuth)
   const location = useLocation()
 
+  // Proactively clear expired tokens so we don't briefly show protected UI.
+  const payload = token ? decodeJwt(token) : null
+  const expiresAt = Number(payload?.exp || 0) * 1000
+  const tokenInvalid = Boolean(token) && (!payload || !expiresAt || expiresAt < Date.now())
+
+  useEffect(() => {
+    if (token && tokenInvalid) clearAuth()
+  }, [clearAuth, token, tokenInvalid])
+
   if (!token) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
-  // Proactively clear expired tokens so we don't briefly show protected UI.
-  const payload = decodeJwt(token)
-  if (payload?.exp && payload.exp * 1000 < Date.now()) {
-    clearAuth()
+  if (tokenInvalid) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 

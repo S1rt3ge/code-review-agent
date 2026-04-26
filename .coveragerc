@@ -1,0 +1,6 @@
+[run]
+omit =
+    backend/tests/*
+
+[report]
+skip_empty = True

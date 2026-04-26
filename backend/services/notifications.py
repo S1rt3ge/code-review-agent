@@ -43,9 +43,16 @@ def _send_email_sync(to_email: str, subject: str, body: str) -> None:
 
     if not _smtp_is_configured():
         if _email_fallback_allowed():
-            logger.info(
-                "[email-fallback] to=%s subject=%s\n%s", to_email, subject, body
-            )
+            if settings.app_env.lower() in _NON_PROD_ENVS:
+                logger.info(
+                    "[email-fallback] to=%s subject=%s\n%s", to_email, subject, body
+                )
+            else:
+                logger.info(
+                    "[email-fallback] to=%s subject=%s body=<redacted>",
+                    to_email,
+                    subject,
+                )
             return
         logger.error(
             "Email delivery unavailable in %s: SMTP_HOST is not configured",

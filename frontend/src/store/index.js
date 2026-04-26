@@ -12,6 +12,7 @@ import { create } from 'zustand'
  * @property {string|null} token - JWT access token (also persisted in localStorage)
  * @property {AuthUser|null} user - Authenticated user info
  * @property {function(string, AuthUser): void} setAuth - Store token + user after login
+ * @property {function(AuthUser): void} setUser - Store refreshed user profile
  * @property {function(): void} clearAuth - Remove token + user on logout
  */
 
@@ -33,6 +34,12 @@ export const useAuthStore = create(set => ({
     localStorage.setItem('token', token)
     set({ token, user })
   },
+
+  /**
+   * Store a refreshed authenticated user profile.
+   * @param {AuthUser} user
+   */
+  setUser: user => set({ user }),
 
   /**
    * Remove the token from localStorage and clear auth state.

@@ -6,10 +6,10 @@ state due to process crashes/restarts.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import update
+from sqlalchemy import exists, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.db_models import Review
+from backend.models.db_models import AnalysisJob, Review
 
 
 async def recover_stuck_reviews(session: AsyncSession) -> int:
@@ -21,9 +21,13 @@ async def recover_stuck_reviews(session: AsyncSession) -> int:
     Returns:
         Number of rows updated.
     """
+    resumable_job_exists = exists().where(
+        AnalysisJob.review_id == Review.id,
+        AnalysisJob.status.in_(["pending", "running"]),
+    )
     result = await session.execute(
         update(Review)
-        .where(Review.status == "analyzing")
+        .where(Review.status == "analyzing", ~resumable_job_exists)
         .values(
             status="error",
             error_message="Analysis interrupted by server restart",

@@ -13,11 +13,11 @@ from backend.config import settings
 def _client_ip_key(request: Request) -> str:
     """Return client key for rate limiting.
 
-    Prefers ``X-Forwarded-For`` (first hop) when present so limits work
-    correctly behind reverse proxies/load balancers.
+    Forwarded headers are trusted only when explicitly enabled. Otherwise any
+    client could spoof ``X-Forwarded-For`` and bypass auth rate limits.
     """
     forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
+    if settings.trust_proxy_headers and forwarded_for:
         return forwarded_for.split(",", 1)[0].strip()
 
     if request.client and request.client.host:

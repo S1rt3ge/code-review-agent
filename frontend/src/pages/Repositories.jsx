@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useApi } from '@/hooks/useApi.js'
+import { absoluteApiUrl } from '@/config.js'
 
 /**
  * @typedef {Object} Repository
@@ -32,16 +33,20 @@ function formatDate(isoDate) {
  */
 function CopyableCode({ value }) {
   const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState(null)
 
   /**
    * Copy text to clipboard and show brief confirmation.
    * @returns {void}
    */
   function handleCopy() {
-    navigator.clipboard.writeText(value).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1800)
-    })
+    setCopyError(null)
+    navigator.clipboard.writeText(value)
+      .then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1800)
+      })
+      .catch(() => setCopyError('Copy failed'))
   }
 
   return (
@@ -56,6 +61,7 @@ function CopyableCode({ value }) {
       >
         {copied ? 'Copied!' : 'Copy'}
       </button>
+      {copyError && <span className="text-xs text-red-500">{copyError}</span>}
     </span>
   )
 }
@@ -65,7 +71,7 @@ function CopyableCode({ value }) {
  * @returns {React.ReactElement}
  */
 function WebhookInfoPanel() {
-  const webhookUrl = `${window.location.origin}/api/github/webhook`
+  const webhookUrl = absoluteApiUrl('/github/webhook')
 
   return (
     <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-5 space-y-3">
@@ -79,7 +85,7 @@ function WebhookInfoPanel() {
         </li>
         <li>
           <span className="font-medium">Webhook secret:</span>{' '}
-          Use the <code className="text-xs bg-blue-100 dark:bg-blue-900 px-1.5 py-0.5 rounded font-mono">GITHUB_WEBHOOK_SECRET</code> value from your Railway environment variables.
+          Use the <code className="text-xs bg-blue-100 dark:bg-blue-900 px-1.5 py-0.5 rounded font-mono">GITHUB_WEBHOOK_SECRET</code> value from your backend environment variables.
         </li>
         <li>
           Add this webhook in your GitHub repo under{' '}
@@ -140,7 +146,9 @@ function AddRepoForm({ onAdded }) {
         Add Repository
       </h2>
       <div className="flex flex-col sm:flex-row gap-3">
+        <label htmlFor="repo-owner" className="sr-only">GitHub owner</label>
         <input
+          id="repo-owner"
           type="text"
           placeholder="Owner (e.g. octocat)"
           value={owner}
@@ -148,7 +156,9 @@ function AddRepoForm({ onAdded }) {
           required
           className="flex-1 px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
         />
+        <label htmlFor="repo-name" className="sr-only">Repository name</label>
         <input
+          id="repo-name"
           type="text"
           placeholder="Repo name (e.g. my-project)"
           value={name}
@@ -179,6 +189,7 @@ function AddRepoForm({ onAdded }) {
 function RepoRow({ repo, onRefresh }) {
   const [toggling, setToggling] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [rowError, setRowError] = useState(null)
 
   const { patch, del } = useApi()
 
@@ -188,9 +199,12 @@ function RepoRow({ repo, onRefresh }) {
    */
   async function handleToggle() {
     setToggling(true)
+    setRowError(null)
     try {
       await patch(`/repositories/${repo.id}`, { enabled: !repo.enabled })
-      onRefresh()
+      await onRefresh()
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : 'Failed to update repository')
     } finally {
       setToggling(false)
     }
@@ -203,9 +217,12 @@ function RepoRow({ repo, onRefresh }) {
   async function handleDelete() {
     if (!window.confirm(`Remove ${repo.github_repo_owner}/${repo.github_repo_name}? This cannot be undone.`)) return
     setDeleting(true)
+    setRowError(null)
     try {
       await del(`/repositories/${repo.id}`)
-      onRefresh()
+      await onRefresh()
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : 'Failed to remove repository')
     } finally {
       setDeleting(false)
     }
@@ -215,7 +232,7 @@ function RepoRow({ repo, onRefresh }) {
   const repoUrl = repo.github_repo_url || `https://github.com/${repoFullName}`
 
   return (
-    <tr className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+    <tr className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
       <td className="py-3 px-4">
         <a
           href={repoUrl}
@@ -262,6 +279,11 @@ function RepoRow({ repo, onRefresh }) {
             {deleting ? '...' : 'Remove'}
           </button>
         </div>
+        {rowError && (
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400 text-right">
+            {rowError}
+          </p>
+        )}
       </td>
     </tr>
   )

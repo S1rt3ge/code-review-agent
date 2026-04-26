@@ -131,7 +131,7 @@ async def test_register_success(client):
         },
     )
     assert r.status_code == 201
-    assert "access_token" in r.json()
+    assert "verify your email" in r.json()["message"].lower()
 
 
 @pytest.mark.integration
@@ -397,6 +397,41 @@ async def test_create_review(client, auth_headers, db_repo_id):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_create_review_rejects_foreign_repository(client, auth_headers):
+    other_user_id = uuid.uuid4()
+    foreign_repo_id = uuid.uuid4()
+    async with async_session_factory() as session:
+        await session.execute(
+            insert(User).values(
+                id=other_user_id,
+                email=f"foreign_{uuid.uuid4().hex[:8]}@test.com",
+                username=f"foreign_{uuid.uuid4().hex[:8]}",
+                hashed_password="x",
+                email_verified=True,
+            )
+        )
+        await session.execute(
+            insert(Repository).values(
+                id=foreign_repo_id,
+                user_id=other_user_id,
+                github_repo_owner="other",
+                github_repo_name=f"repo_{uuid.uuid4().hex[:6]}",
+                github_repo_url="https://github.com/other/repo",
+                enabled=True,
+            )
+        )
+        await session.commit()
+
+    r = await client.post(
+        "/api/reviews",
+        json={"repo_id": str(foreign_repo_id), "github_pr_number": 42},
+        headers=auth_headers,
+    )
+    assert r.status_code == 404
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_list_reviews_scoped_to_user(client, auth_headers, db_repo_id):
     # Create one review
     await client.post(
@@ -428,6 +463,16 @@ async def test_get_review_detail(client, auth_headers, db_repo_id):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_websocket_ticket_requires_review_ownership(client, auth_headers):
+    r = await client.post(
+        f"/api/reviews/{uuid.uuid4()}/ws-ticket",
+        headers=auth_headers,
+    )
+    assert r.status_code == 404
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_get_review_not_found(client, auth_headers):
     r = await client.get(f"/api/reviews/{uuid.uuid4()}", headers=auth_headers)
     assert r.status_code == 404
@@ -447,6 +492,26 @@ async def test_analyze_sets_status_analyzing(client, auth_headers, db_repo_id):
         r = await client.post(f"/api/reviews/{review_id}/analyze", headers=auth_headers)
     assert r.status_code == 200
     assert r.json()["status"] == "analyzing"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_analyze_rejects_unknown_force_agent(client, auth_headers, db_repo_id):
+    r = await client.post(
+        "/api/reviews",
+        json={"repo_id": db_repo_id, "github_pr_number": 12},
+        headers=auth_headers,
+    )
+    review_id = r.json()["id"]
+
+    with patch("backend.routers.reviews.enqueue_analysis", new_callable=AsyncMock) as enqueue:
+        r = await client.post(
+            f"/api/reviews/{review_id}/analyze?force_agents=security,unknown",
+            headers=auth_headers,
+        )
+
+    assert r.status_code == 400
+    enqueue.assert_not_called()
 
 
 @pytest.mark.integration
@@ -494,6 +559,17 @@ async def test_update_settings_agents(client, auth_headers):
     assert r.status_code == 200
     body = r.json()
     assert set(body["default_agents"]) == {"security", "logic"}
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_update_settings_rejects_empty_agents(client, auth_headers):
+    r = await client.put(
+        "/api/settings",
+        json={"default_agents": []},
+        headers=auth_headers,
+    )
+    assert r.status_code == 400
 
 
 @pytest.mark.integration
@@ -793,6 +869,86 @@ async def test_webhook_duplicate_returns_existing_without_requeue(client):
 
     assert r.status_code == 202
     assert r.json()["status"] == "pending"
+    assert r.json()["review_id"] == str(review_id)
+    enqueue.assert_not_called()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_webhook_duplicate_completed_sha_returns_existing(client):
+    """Webhook redelivery for the same PR/SHA should be idempotent after completion."""
+    user_id = uuid.uuid4()
+    repo_id = uuid.uuid4()
+    review_id = uuid.uuid4()
+    owner = f"orgdone_{uuid.uuid4().hex[:6]}"
+    name = f"repodone_{uuid.uuid4().hex[:6]}"
+
+    async with async_session_factory() as session:
+        await session.execute(
+            insert(User).values(
+                id=user_id,
+                email=f"hookdone_{uuid.uuid4().hex[:8]}@test.com",
+                username=f"hookdone_{uuid.uuid4().hex[:8]}",
+                hashed_password="x",
+                email_verified=True,
+            )
+        )
+        await session.execute(
+            insert(Repository).values(
+                id=repo_id,
+                user_id=user_id,
+                github_repo_owner=owner,
+                github_repo_name=name,
+                github_repo_url=f"https://github.com/{owner}/{name}",
+                enabled=True,
+            )
+        )
+        await session.execute(
+            insert(Review).values(
+                id=review_id,
+                user_id=user_id,
+                repo_id=repo_id,
+                github_pr_number=89,
+                head_sha="doneheadsha",
+                status="done",
+            )
+        )
+        await session.commit()
+
+    secret = "test-webhook-secret"
+    payload = json.dumps(
+        {
+            "action": "opened",
+            "pull_request": {
+                "number": 89,
+                "title": "feature: duplicate done",
+                "head": {"sha": "doneheadsha"},
+                "base": {"sha": "base"},
+            },
+            "repository": {
+                "owner": {"login": owner},
+                "name": name,
+                "full_name": f"{owner}/{name}",
+            },
+        }
+    ).encode()
+
+    with (
+        patch("backend.config.settings.github_webhook_secret", secret),
+        patch("backend.routers.github.enqueue_analysis", new_callable=AsyncMock) as enqueue,
+    ):
+        r = await client.post(
+            "/api/github/webhook",
+            content=payload,
+            headers={
+                "Content-Type": "application/json",
+                "X-GitHub-Event": "pull_request",
+                "X-Hub-Signature-256": _sign(payload, secret),
+            },
+        )
+
+    assert r.status_code == 202
+    assert r.json()["status"] == "done"
     assert r.json()["review_id"] == str(review_id)
     enqueue.assert_not_called()
 

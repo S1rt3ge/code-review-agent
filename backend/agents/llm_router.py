@@ -16,6 +16,7 @@ from enum import Enum
 import httpx
 
 from backend.config import settings as app_settings
+from backend.utils.url_security import validate_server_http_url
 
 logger = logging.getLogger(__name__)
 
@@ -235,10 +236,16 @@ class LLMRouter:
             True if the Ollama server responds, False otherwise.
         """
         try:
-            async with httpx.AsyncClient(timeout=PROBE_TIMEOUT) as client:
-                resp = await client.get(f"{host}/api/tags")
+            allow_private = (
+                app_settings.app_env.lower()
+                in {"development", "dev", "local", "test", "testing"}
+                or app_settings.allow_private_ollama_hosts
+            )
+            safe_host = validate_server_http_url(host, allow_private=allow_private)
+            async with httpx.AsyncClient(timeout=PROBE_TIMEOUT, follow_redirects=False) as client:
+                resp = await client.get(f"{safe_host}/api/tags")
                 return resp.status_code == 200
-        except httpx.HTTPError:
+        except (ValueError, httpx.HTTPError):
             return False
 
 

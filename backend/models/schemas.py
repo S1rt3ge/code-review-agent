@@ -28,7 +28,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -39,16 +39,34 @@ from pydantic import BaseModel, ConfigDict, Field
 class RegisterRequest(BaseModel):
     """Request body for user registration."""
 
-    email: str
-    password: str
-    username: str | None = None
+    email: str = Field(..., min_length=3, max_length=254)
+    password: str = Field(..., min_length=8, max_length=256)
+    username: str | None = Field(default=None, min_length=1, max_length=100)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
+            raise ValueError("Invalid email address")
+        return normalized
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
 
 
 class LoginRequest(BaseModel):
     """Request body for email/password login."""
 
-    email: str
-    password: str
+    email: str = Field(..., min_length=3, max_length=254)
+    password: str = Field(..., min_length=1, max_length=256)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
 
 
 class TokenResponse(BaseModel):
@@ -64,26 +82,36 @@ class TokenResponse(BaseModel):
 class PasswordResetRequest(BaseModel):
     """Request password reset for an account email."""
 
-    email: str
+    email: str = Field(..., min_length=3, max_length=254)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
 
 
 class PasswordResetConfirmRequest(BaseModel):
     """Confirm password reset with token and new password."""
 
-    token: str
-    new_password: str
+    token: str = Field(..., max_length=512)
+    new_password: str = Field(..., min_length=8, max_length=256)
 
 
 class EmailVerificationRequest(BaseModel):
     """Request email verification email."""
 
-    email: str
+    email: str = Field(..., min_length=3, max_length=254)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
 
 
 class EmailVerificationConfirmRequest(BaseModel):
     """Confirm account email verification token."""
 
-    token: str
+    token: str = Field(..., max_length=512)
 
 
 class MessageResponse(BaseModel):
@@ -262,10 +290,10 @@ class SettingsResponse(BaseModel):
 class SettingsUpdate(BaseModel):
     """Request body for updating user LLM settings."""
 
-    api_key_claude: str | None = None
-    api_key_gpt: str | None = None
+    api_key_claude: str | None = Field(default=None, max_length=512)
+    api_key_gpt: str | None = Field(default=None, max_length=512)
     ollama_enabled: bool | None = None
-    ollama_host: str | None = None
+    ollama_host: str | None = Field(default=None, max_length=2048)
     default_agents: list[str] | None = None
     lm_preference: str | None = None
 
@@ -348,7 +376,7 @@ class CreateReviewRequest(BaseModel):
     """Request body for manually creating a review."""
 
     repo_id: UUID
-    github_pr_number: int
+    github_pr_number: int = Field(..., ge=1)
     selected_agents: list[str] = Field(
         default_factory=lambda: ["security", "performance", "style", "logic"],
     )

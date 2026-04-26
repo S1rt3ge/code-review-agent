@@ -25,6 +25,7 @@ from backend.models.schemas import (
 from backend.utils.auth import get_current_user
 from backend.utils.crypto import decrypt_value, encrypt_value
 from backend.utils.database import get_db
+from backend.utils.url_security import validate_server_http_url
 
 logger = logging.getLogger(__name__)
 
@@ -39,13 +40,24 @@ LLM_TEST_TIMEOUT = 10
 
 
 def _try_decrypt(ciphertext: str | None) -> str | None:
-    """Decrypt a ciphertext string, returning None on any failure."""
+    """Decrypt a ciphertext string, returning None when no value is configured."""
     if not ciphertext:
         return None
     try:
         return decrypt_value(ciphertext)
-    except Exception:
-        return None
+    except Exception as exc:
+        raise RuntimeError("Configured API key could not be decrypted") from exc
+
+
+def _private_ollama_allowed() -> bool:
+    return (
+        app_settings.app_env.lower() in {"development", "dev", "local", "test", "testing"}
+        or app_settings.allow_private_ollama_hosts
+    )
+
+
+def _validate_ollama_host(host: str) -> str:
+    return validate_server_http_url(host, allow_private=_private_ollama_allowed())
 
 
 @router.get("", response_model=SettingsResponse)
@@ -97,6 +109,11 @@ async def update_settings(
 
     # Validate agent names
     if payload.default_agents is not None:
+        if not payload.default_agents:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one default agent must be selected",
+            )
         invalid = set(payload.default_agents) - VALID_AGENTS
         if invalid:
             raise HTTPException(
@@ -118,7 +135,14 @@ async def update_settings(
     # Warn if Ollama is enabled but host is unreachable
     if payload.ollama_enabled and payload.ollama_host:
         try:
-            async with httpx.AsyncClient(timeout=LLM_TEST_TIMEOUT) as client:
+            payload.ollama_host = _validate_ollama_host(payload.ollama_host)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+        try:
+            async with httpx.AsyncClient(timeout=LLM_TEST_TIMEOUT, follow_redirects=False) as client:
                 resp = await client.get(f"{payload.ollama_host}/api/tags")
                 if resp.status_code != 200:
                     warnings.append(f"Ollama host returned status {resp.status_code}")
@@ -148,7 +172,16 @@ async def update_settings(
         current_user.ollama_enabled = payload.ollama_enabled
 
     if payload.ollama_host is not None:
-        current_user.ollama_host = payload.ollama_host
+        if payload.ollama_host:
+            try:
+                current_user.ollama_host = _validate_ollama_host(payload.ollama_host)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(exc),
+                ) from exc
+        else:
+            current_user.ollama_host = None
 
     if payload.default_agents is not None:
         current_user.default_agents = payload.default_agents
@@ -190,8 +223,14 @@ async def test_llm(
         Availability flags and detected model names for each provider.
     """
     # Resolve effective API keys (user key overrides app-level key)
-    claude_key = _try_decrypt(current_user.api_key_claude) or app_settings.anthropic_api_key
-    gpt_key = _try_decrypt(current_user.api_key_gpt) or app_settings.openai_api_key
+    try:
+        claude_key = _try_decrypt(current_user.api_key_claude) or app_settings.anthropic_api_key
+        gpt_key = _try_decrypt(current_user.api_key_gpt) or app_settings.openai_api_key
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
     ollama_host = current_user.ollama_host or app_settings.ollama_host
 
     claude_ok = False
@@ -200,7 +239,7 @@ async def test_llm(
     models: dict[str, str] = {}
     selected: str | None = None
 
-    async with httpx.AsyncClient(timeout=LLM_TEST_TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=LLM_TEST_TIMEOUT, follow_redirects=False) as client:
         # Test Claude
         if claude_key:
             try:
@@ -230,9 +269,10 @@ async def test_llm(
             except httpx.HTTPError as e:
                 logger.warning("GPT connectivity check failed: %s", e)
 
-        # Test Ollama (only if enabled)
-        if current_user.ollama_enabled or app_settings.ollama_host:
+        # Test Ollama only when the user explicitly enabled local models.
+        if current_user.ollama_enabled:
             try:
+                ollama_host = _validate_ollama_host(ollama_host)
                 resp = await client.get(f"{ollama_host}/api/tags")
                 ollama_ok = resp.status_code == 200
                 if ollama_ok:
@@ -241,7 +281,7 @@ async def test_llm(
                     models["ollama"] = (
                         ollama_models[0].get("name", "unknown") if ollama_models else "no models loaded"
                     )
-            except httpx.HTTPError as e:
+            except (ValueError, httpx.HTTPError) as e:
                 logger.debug("Ollama connectivity check failed: %s", e)
 
     # Determine selected provider

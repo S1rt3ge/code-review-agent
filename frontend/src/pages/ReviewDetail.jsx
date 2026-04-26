@@ -19,6 +19,7 @@ import { StatusBadge } from '@/components/StatusBadge.jsx'
  * @property {number} tokens_output
  * @property {number} findings_count
  * @property {string|null} error_message
+ * @property {string[]|null} selected_agents
  */
 
 /**
@@ -101,7 +102,7 @@ export function ReviewDetail() {
 
   // Live agent statuses from WebSocket (only active while analyzing)
   const wsReviewId = review?.status === 'analyzing' ? id : null
-  const { agentStatuses, isConnected } = useWebsocket(wsReviewId)
+  const { agentStatuses, isConnected, wsError } = useWebsocket(wsReviewId)
 
   const fetchReview = useCallback(async () => {
     setError(null)
@@ -151,7 +152,8 @@ export function ReviewDetail() {
   }, [post, id, fetchReview])
 
   // Merge DB agent executions with live WS statuses
-  const agentStatusList = KNOWN_AGENTS.map(name => {
+  const selectedAgents = review?.selected_agents?.length ? review.selected_agents : KNOWN_AGENTS
+  const agentStatusList = selectedAgents.map(name => {
     const exec = review?.agent_executions?.find(e => e.agent_name === name)
     const liveStatus = agentStatuses[name]
     return {
@@ -273,6 +275,12 @@ export function ReviewDetail() {
             : 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
         }`}>
           {commentMsg}
+        </div>
+      )}
+
+      {review.status === 'analyzing' && wsError && (
+        <div className="rounded-lg px-4 py-3 text-sm bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+          Live updates unavailable: {wsError}. Polling will continue.
         </div>
       )}
 

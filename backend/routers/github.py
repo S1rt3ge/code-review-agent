@@ -17,10 +17,11 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
-from backend.models.db_models import Repository, Review
+from backend.models.db_models import Repository, Review, User
 from backend.models.schemas import WebhookPayload
 from backend.services.analysis_queue import enqueue_analysis
 from backend.utils.database import get_db
@@ -60,8 +61,24 @@ async def github_webhook(
         HTTPException 400: If the payload is malformed or the action is unsupported.
         HTTPException 404: If the repository is not configured in the system.
     """
+    content_length = request.headers.get("content-length")
+    try:
+        body_size = int(content_length) if content_length else 0
+    except ValueError:
+        body_size = 0
+    if body_size > settings.webhook_max_body_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Webhook payload is too large",
+        )
+
     # Read raw body for signature verification
     body = await request.body()
+    if len(body) > settings.webhook_max_body_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Webhook payload is too large",
+        )
     event_type = request.headers.get("X-GitHub-Event", "")
 
     # Verify HMAC-SHA256 signature
@@ -73,9 +90,16 @@ async def github_webhook(
             detail="Invalid webhook signature",
         )
 
+    if event_type == "ping":
+        return {"review_id": "", "status": "ignored"}
+
     # Handle GitHub App installation events
     if event_type in ("installation", "installation_repositories"):
         return await _handle_installation_event(body, session)
+
+    if event_type != "pull_request":
+        logger.info("Ignoring unsupported webhook event type: %s", event_type)
+        return {"review_id": "", "status": "ignored"}
 
     # Parse payload
     try:
@@ -111,7 +135,6 @@ async def github_webhook(
             detail=f"Repository {repo_owner}/{repo_name} is not configured",
         )
 
-    repository = repositories[0]
     installation_id: int | None = None
     if payload.installation and isinstance(payload.installation, dict):
         raw_installation_id = payload.installation.get("id")
@@ -124,37 +147,43 @@ async def github_webhook(
             for repo in repositories
             if repo.github_installation_id == installation_id
         ]
-        if exact_matches:
-            repository = exact_matches[0]
-            if len(exact_matches) > 1:
-                logger.warning(
-                    "Multiple repository rows matched owner/name/install id %s/%s/%s; "
-                    "using first match",
-                    repo_owner,
-                    repo_name,
-                    installation_id,
-                )
-        elif len(repositories) > 1:
+        if not exact_matches:
             logger.warning(
-                "Multiple repository rows matched owner/name %s/%s with no install-id "
-                "match for %s; using first match",
+                "Repository %s/%s is configured, but no enabled row matched installation_id=%s",
                 repo_owner,
                 repo_name,
                 installation_id,
             )
-    elif len(repositories) > 1:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Repository installation is not configured",
+            )
+        if len(exact_matches) > 1:
+            logger.warning(
+                "Multiple repository rows matched owner/name/install id %s/%s/%s; using first match",
+                repo_owner,
+                repo_name,
+                installation_id,
+            )
+        repository = exact_matches[0]
+    elif len(repositories) != 1:
         logger.warning(
-            "Multiple repository rows matched owner/name %s/%s; using first match",
+            "Multiple repository rows matched owner/name %s/%s without installation id; ignoring webhook",
             repo_owner,
             repo_name,
         )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository installation is not configured",
+        )
+    else:
+        repository = repositories[0]
 
-    # Check for duplicate review (same PR, same head SHA, already running)
+    # Check for duplicate review (same PR, same head SHA)
     dup_stmt = select(Review).where(
         Review.repo_id == repository.id,
         Review.github_pr_number == payload.pull_request.number,
         Review.head_sha == payload.pull_request.head.sha,
-        Review.status.in_(["pending", "analyzing"]),
     )
     dup_result = await session.execute(dup_stmt)
     existing = dup_result.scalar_one_or_none()
@@ -166,6 +195,13 @@ async def github_webhook(
         )
         return {"review_id": str(existing.id), "status": existing.status}
 
+    user = await session.get(User, repository.user_id)
+    selected_agents = (
+        user.default_agents
+        if user and user.default_agents
+        else ["security", "performance", "style", "logic"]
+    )
+
     # Create review record
     review = Review(
         id=uuid.uuid4(),
@@ -176,10 +212,23 @@ async def github_webhook(
         head_sha=payload.pull_request.head.sha,
         base_sha=payload.pull_request.base.sha,
         status="pending",
-        selected_agents=["security", "performance", "style", "logic"],
+        selected_agents=selected_agents,
     )
     session.add(review)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        dup_result = await session.execute(dup_stmt)
+        existing = dup_result.scalar_one_or_none()
+        if existing is not None:
+            logger.info(
+                "Concurrent duplicate review detected for PR #%s sha=%s",
+                payload.pull_request.number,
+                payload.pull_request.head.sha,
+            )
+            return {"review_id": str(existing.id), "status": existing.status}
+        raise
 
     logger.info(
         f"Created review {review.id} for "
@@ -187,7 +236,7 @@ async def github_webhook(
     )
 
     # Kick off analysis in the background; response returns immediately.
-    await enqueue_analysis(review.id)
+    await enqueue_analysis(review.id, session=session)
 
     return {"review_id": str(review.id), "status": "pending"}
 
@@ -246,12 +295,18 @@ async def _handle_installation_event(
                 Repository.github_repo_name == name,
             )
             result = await session.execute(stmt)
-            repo = result.scalar_one_or_none()
+            repos = result.scalars().all()
 
-            if repo is not None:
-                repo.github_installation_id = installation_id
-                repo.enabled = True
-                logger.info(f"Updated installation_id={installation_id} on {full_name}")
+            if repos:
+                for repo in repos:
+                    repo.github_installation_id = installation_id
+                    repo.enabled = True
+                logger.info(
+                    "Updated installation_id=%s on %s for %d repository row(s)",
+                    installation_id,
+                    full_name,
+                    len(repos),
+                )
             else:
                 logger.info(f"Skipping {full_name}: not registered by any user")
 
@@ -267,13 +322,14 @@ async def _handle_installation_event(
                 Repository.github_repo_name == name,
             )
             result = await session.execute(stmt)
-            repo = result.scalar_one_or_none()
+            repos = result.scalars().all()
 
-            if repo is not None:
-                repo.enabled = False
-                logger.info(
-                    f"Disabled repository {full_name} (removed from installation)"
-                )
+            for repo in repos:
+                if repo.github_installation_id == installation_id:
+                    repo.enabled = False
+                    logger.info(
+                        f"Disabled repository {full_name} (removed from installation)"
+                    )
 
         await session.flush()
         logger.info(

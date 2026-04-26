@@ -59,29 +59,31 @@ def _frontend_link(path: str, token: str) -> str:
 
 
 @router.post(
-    "/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED
+    "/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED
 )
 @limiter.limit(settings.auth_register_rate_limit)
 async def register(
     request: Request,  # noqa: ARG001
     payload: RegisterRequest,
     session: AsyncSession = Depends(get_db),
-) -> TokenResponse:
-    """Create a new user account and return an access token.
+) -> MessageResponse:
+    """Create a new user account and send an email verification link.
 
     Args:
         payload: Email, username, and password for the new account.
         session: Async database session.
 
     Returns:
-        JWT access token and basic user profile.
+        A message instructing the user to verify their email.
 
     Raises:
         HTTPException 409: If the email or username is already taken.
     """
+    email = payload.email.strip().lower()
+
     # Check for duplicate email
     existing_email = await session.execute(
-        select(User).where(User.email == payload.email)
+        select(User).where(User.email == email)
     )
     if existing_email.scalar_one_or_none() is not None:
         raise HTTPException(
@@ -90,7 +92,7 @@ async def register(
         )
 
     # Derive username from email prefix if not provided
-    username = payload.username or payload.email.split("@")[0]
+    username = payload.username or email.split("@")[0]
 
     # Ensure username is unique (append suffix if taken)
     base = username
@@ -109,7 +111,7 @@ async def register(
 
     user = User(
         id=uuid.uuid4(),
-        email=payload.email,
+        email=email,
         username=username,
         hashed_password=hash_password(payload.password),
         email_verified=False,
@@ -121,8 +123,6 @@ async def register(
     )
     session.add(user)
     await session.flush()
-
-    token = create_access_token(user_id=user.id, email=user.email)
 
     verification_link = _frontend_link("/verify-email", verification_token)
     subject, body = build_email_verification_email(verification_link)
@@ -144,12 +144,7 @@ async def register(
 
     logger.info("Registered new user %s (%s)", user.username, user.email)
 
-    return TokenResponse(
-        access_token=token,
-        user_id=str(user.id),
-        email=user.email,
-        username=user.username,
-    )
+    return MessageResponse(message="Account created. Please verify your email before signing in.")
 
 
 @router.post("/token", response_model=TokenResponse)
@@ -174,7 +169,8 @@ async def login(
     Raises:
         HTTPException 401: If credentials are invalid.
     """
-    result = await session.execute(select(User).where(User.email == form_data.username))
+    email = form_data.username.strip().lower()
+    result = await session.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
     invalid_exc = HTTPException(
@@ -222,7 +218,8 @@ async def request_password_reset(
         "If an account with that email exists, a password reset link has been sent."
     )
 
-    result = await session.execute(select(User).where(User.email == payload.email))
+    email = payload.email.strip().lower()
+    result = await session.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
     if user is None or not user.hashed_password:
@@ -299,7 +296,8 @@ async def request_email_verification(
         "If the account exists and is unverified, a verification link has been sent."
     )
 
-    result = await session.execute(select(User).where(User.email == payload.email))
+    email = payload.email.strip().lower()
+    result = await session.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     if user is None or user.email_verified:
         return MessageResponse(message=generic_message)
