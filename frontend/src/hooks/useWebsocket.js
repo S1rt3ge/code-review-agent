@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
+import { apiUrl, WS_BASE_URL } from '@/config.js'
+import { useAuthStore } from '@/store/index.js'
 
-const WS_BASE_URL = window.location.origin.replace(/^http/, 'ws')
+const MAX_RECONNECT_ATTEMPTS = 5
 
 /**
  * @typedef {'pending'|'running'|'done'|'error'} AgentStatusValue
@@ -19,13 +21,16 @@ const WS_BASE_URL = window.location.origin.replace(/^http/, 'ws')
  * @param {string|null} reviewId - The review to subscribe to, or null to disconnect
  * @returns {{
  *   agentStatuses: Object.<string, AgentStatusValue>,
- *   isConnected: boolean
+ *   isConnected: boolean,
+ *   wsError: string|null
  * }}
  */
 export function useWebsocket(reviewId) {
   /** @type {[Object.<string, AgentStatusValue>, function]} */
   const [agentStatuses, setAgentStatuses] = useState({})
   const [isConnected, setIsConnected] = useState(false)
+  const [wsError, setWsError] = useState(null)
+  const token = useAuthStore(s => s.token)
 
   /**
    * Parse an incoming WebSocket message and update agent status map.
@@ -42,42 +47,76 @@ export function useWebsocket(reviewId) {
         }))
       }
     } catch {
-      // Ignore malformed messages
+      setWsError('Received malformed WebSocket message')
     }
   }, [])
 
   useEffect(() => {
-    if (!reviewId) {
+    if (!reviewId || !token) {
       setAgentStatuses({})
       setIsConnected(false)
+      setWsError(null)
       return
     }
 
-    const token = localStorage.getItem('token')
-    const url = token
-      ? `${WS_BASE_URL}/ws/progress/${reviewId}?token=${encodeURIComponent(token)}`
-      : `${WS_BASE_URL}/ws/progress/${reviewId}`
+    let ws = null
+    let cancelled = false
+    let reconnectTimer = null
+    let attempts = 0
 
-    const ws = new WebSocket(url)
-
-    ws.onopen = () => {
-      setIsConnected(true)
+    const scheduleReconnect = () => {
+      if (cancelled || attempts >= MAX_RECONNECT_ATTEMPTS) return
+      const delay = Math.min(1000 * (2 ** attempts), 10000)
+      attempts += 1
+      reconnectTimer = window.setTimeout(connect, delay)
     }
 
-    ws.onmessage = handleMessage
+    const connect = async () => {
+      try {
+        setWsError(null)
+        const ticketResponse = await fetch(apiUrl(`/reviews/${reviewId}/ws-ticket`), {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!ticketResponse.ok) throw new Error(`Ticket request failed (${ticketResponse.status})`)
+        const { ticket } = await ticketResponse.json()
+        if (cancelled) return
 
-    ws.onerror = () => {
-      setIsConnected(false)
+        const url = `${WS_BASE_URL}/progress/${encodeURIComponent(reviewId)}?ticket=${encodeURIComponent(ticket)}`
+        ws = new WebSocket(url)
+
+        ws.onopen = () => {
+          attempts = 0
+          setIsConnected(true)
+          setWsError(null)
+        }
+
+        ws.onmessage = handleMessage
+
+        ws.onerror = () => {
+          setIsConnected(false)
+          setWsError('WebSocket connection error')
+        }
+
+        ws.onclose = () => {
+          setIsConnected(false)
+          scheduleReconnect()
+        }
+      } catch (err) {
+        setIsConnected(false)
+        setWsError(err instanceof Error ? err.message : 'WebSocket connection failed')
+        scheduleReconnect()
+      }
     }
 
-    ws.onclose = () => {
-      setIsConnected(false)
-    }
+    connect()
 
     return () => {
-      ws.close()
+      cancelled = true
+      if (reconnectTimer) window.clearTimeout(reconnectTimer)
+      if (ws) ws.close()
     }
-  }, [reviewId, handleMessage])
+  }, [reviewId, token, handleMessage])
 
-  return { agentStatuses, isConnected }
+  return { agentStatuses, isConnected, wsError }
 }

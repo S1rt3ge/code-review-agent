@@ -33,7 +33,7 @@ from backend.models.schemas import (
 from backend.services.analysis_queue import enqueue_analysis
 from backend.services.pr_commenter import build_comment
 from backend.services.github_api import get_github_client
-from backend.utils.auth import get_current_user
+from backend.utils.auth import create_review_ws_ticket, get_current_user
 from backend.utils.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,24 @@ router = APIRouter(prefix="/reviews", tags=["reviews"])
 
 MAX_PAGE_LIMIT = 100
 DEFAULT_PAGE_LIMIT = 20
+VALID_AGENTS = {"security", "performance", "style", "logic"}
+
+
+def _validate_agents(agent_names: list[str]) -> list[str]:
+    """Validate and normalize selected analysis agent names."""
+    normalized = [agent.strip() for agent in agent_names if agent.strip()]
+    if not normalized:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one analysis agent must be selected",
+        )
+    invalid = sorted(set(normalized) - VALID_AGENTS)
+    if invalid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown agent names: {', '.join(invalid)}",
+        )
+    return normalized
 
 
 # ---------------------------------------------------------------------------
@@ -127,13 +145,27 @@ async def create_review(
     Returns:
         The newly created review.
     """
+    repo_stmt = select(Repository).where(
+        Repository.id == payload.repo_id,
+        Repository.user_id == current_user.id,
+    )
+    repo_result = await session.execute(repo_stmt)
+    repo = repo_result.scalar_one_or_none()
+    if repo is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository not found",
+        )
+
+    selected_agents = _validate_agents(payload.selected_agents)
+
     review = Review(
         id=uuid.uuid4(),
         user_id=current_user.id,
-        repo_id=payload.repo_id,
+        repo_id=repo.id,
         github_pr_number=payload.github_pr_number,
         status="pending",
-        selected_agents=payload.selected_agents,
+        selected_agents=selected_agents,
     )
     session.add(review)
     await session.flush()
@@ -234,9 +266,7 @@ async def analyze_review(
 
     # Override agents if requested
     if force_agents:
-        review.selected_agents = [
-            a.strip() for a in force_agents.split(",") if a.strip()
-        ]
+        review.selected_agents = _validate_agents(force_agents.split(","))
 
     review.status = "analyzing"
     await session.flush()
@@ -244,9 +274,29 @@ async def analyze_review(
     logger.info(f"Analysis started for review {review.id}")
 
     # Fire-and-forget background analysis scheduling.
-    await enqueue_analysis(review.id)
+    await enqueue_analysis(review.id, session=session)
 
     return AnalyzeResponse(review_id=review.id, status="analyzing")
+
+
+@router.post("/{review_id}/ws-ticket", response_model=dict)
+async def create_websocket_ticket(
+    review_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    """Issue a short-lived ticket for the review progress WebSocket."""
+    stmt = select(Review.id).where(
+        Review.id == review_id,
+        Review.user_id == current_user.id,
+    )
+    result = await session.execute(stmt)
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review not found",
+        )
+    return {"ticket": create_review_ws_ticket(current_user.id, review_id)}
 
 
 @router.post("/{review_id}/post-comment", response_model=PostCommentResponse)
@@ -298,7 +348,7 @@ async def post_comment(
 
     # Load repository for owner / name / installation_id
     repo = await session.get(Repository, review.repo_id)
-    if repo is None:
+    if repo is None or repo.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Repository not found for this review",
@@ -362,7 +412,7 @@ async def post_comment(
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"GitHub API error: {exc}",
+            detail="GitHub API error while posting the PR comment",
         )
 
     posted_at = datetime.now(timezone.utc)

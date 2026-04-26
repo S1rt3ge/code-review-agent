@@ -175,6 +175,7 @@ async def _run_agent(
         findings = result.get("findings", [])
         tokens_in = result.get("tokens_input", 0)
         tokens_out = result.get("tokens_output", 0)
+        error_message = result.get("error_message")
 
         # Tag each finding with the agent name.
         for f in findings:

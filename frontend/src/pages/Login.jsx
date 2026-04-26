@@ -1,8 +1,7 @@
 import { useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/index.js'
-
-const API_BASE = '/api'
+import { apiUrl } from '@/config.js'
 
 /**
  * POST to the API without an auth token (used for login/register).
@@ -11,7 +10,7 @@ const API_BASE = '/api'
  * @returns {Promise<any>}
  */
 async function publicPost(endpoint, body) {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
+  const res = await fetch(apiUrl(endpoint), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -70,7 +69,7 @@ function LoginForm({ onSuccess }) {
     setLoading(true)
     try {
       // /auth/token uses OAuth2 form encoding
-      const res = await fetch(`${API_BASE}/auth/token`, {
+      const res = await fetch(apiUrl('/auth/token'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ username: email, password }),
@@ -87,10 +86,11 @@ function LoginForm({ onSuccess }) {
       const token = data.access_token
 
       // Fetch current user info
-      const meRes = await fetch(`${API_BASE}/auth/me`, {
+      const meRes = await fetch(apiUrl('/auth/me'), {
         headers: { Authorization: `Bearer ${token}` },
       })
-      const user = meRes.ok ? await meRes.json() : { id: '', email, plan: 'free' }
+      if (!meRes.ok) throw new Error('Unable to load user profile')
+      const user = await meRes.json()
 
       setAuth(token, user)
       onSuccess()
@@ -125,9 +125,9 @@ function LoginForm({ onSuccess }) {
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       )}
       <div className="text-right">
-        <a href="/forgot-password" className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+        <Link to="/forgot-password" className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
           Forgot password?
-        </a>
+        </Link>
       </div>
       <button
         type="submit"
@@ -244,11 +244,13 @@ function RegisterForm({ onRegistered }) {
  */
 export function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [tab, setTab] = useState(/** @type {'login'|'register'} */ ('login'))
 
   const handleSuccess = useCallback(() => {
-    navigate('/', { replace: true })
-  }, [navigate])
+    const from = location.state?.from?.pathname || '/'
+    navigate(from, { replace: true })
+  }, [location.state, navigate])
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">

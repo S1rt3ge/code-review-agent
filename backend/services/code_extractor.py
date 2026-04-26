@@ -145,14 +145,11 @@ def _parse_patch(filename: str, patch: str) -> list[CodeChunk]:
         hunk_match = _HUNK_HEADER.match(raw_line)
         if hunk_match:
             hunk_start = int(hunk_match.group(1))
-            # Flush if accumulated content already exceeds the size limit.
-            if current_lines and len("\n".join(current_lines)) >= MAX_CHUNK_CHARS:
+            # Keep hunk line ranges precise; merging distant hunks makes LLM
+            # line references ambiguous and hurts inline finding accuracy.
+            if current_lines:
                 _flush()
-            # Always update start_line when a new hunk begins so that
-            # chunk.start_line reflects the actual file position of this hunk,
-            # not the position of the very first hunk in the patch.
-            if not current_lines:
-                current_start = hunk_start
+            current_start = hunk_start
             current_line_no = hunk_start
             continue
 

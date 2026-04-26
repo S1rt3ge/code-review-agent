@@ -2,7 +2,8 @@ import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Navbar } from '@/components/Navbar.jsx'
 import { ProtectedRoute } from '@/components/ProtectedRoute.jsx'
-import { useUiStore } from '@/store/index.js'
+import { useAuthStore, useUiStore } from '@/store/index.js'
+import { apiUrl } from '@/config.js'
 
 const Login = lazy(() => import('@/pages/Login.jsx').then(m => ({ default: m.Login })))
 const ForgotPassword = lazy(() => import('@/pages/AuthActions.jsx').then(m => ({ default: m.ForgotPassword })))
@@ -37,6 +38,10 @@ function PageLoader() {
  */
 export function App() {
   const darkMode = useUiStore(state => state.darkMode)
+  const token = useAuthStore(state => state.token)
+  const user = useAuthStore(state => state.user)
+  const setUser = useAuthStore(state => state.setUser)
+  const clearAuth = useAuthStore(state => state.clearAuth)
 
   useEffect(() => {
     if (darkMode) {
@@ -45,6 +50,29 @@ export function App() {
       document.documentElement.classList.remove('dark')
     }
   }, [darkMode])
+
+  useEffect(() => {
+    if (!token || user) return
+    let cancelled = false
+
+    fetch(apiUrl('/auth/me'), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        return response.json()
+      })
+      .then(profile => {
+        if (!cancelled) setUser(profile)
+      })
+      .catch(() => {
+        if (!cancelled) clearAuth()
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [clearAuth, setUser, token, user])
 
   return (
     <BrowserRouter>

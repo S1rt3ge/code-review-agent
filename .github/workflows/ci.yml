@@ -133,14 +133,14 @@ jobs:
         run: |
           pip install psycopg[binary]
           for f in supabase/migrations/*.sql; do
-            psql "$DATABASE_URL" -f "$f"
+            psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f "$f"
           done
         env:
           DATABASE_URL: postgresql://cra_user:cra_password@localhost:5432/cra_db
 
       - name: Run tests
         run: |
-          pytest -m "not integration" --tb=short -q
+          pytest -m "not integration" --tb=short -q --cov=backend --cov-report=term --cov-fail-under=60
           pytest -m integration --tb=short -q
 
       - name: Run ruff
@@ -176,5 +176,5 @@ jobs:
         working-directory: frontend
 
       - name: Run frontend tests
-        run: npm test -- --run
+        run: npm test -- --run --coverage
         working-directory: frontend

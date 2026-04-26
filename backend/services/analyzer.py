@@ -32,13 +32,50 @@ logger = logging.getLogger(__name__)
 
 
 def _try_decrypt_key(ciphertext: str | None) -> str | None:
-    """Decrypt a stored API key, returning None on any failure."""
+    """Decrypt a stored API key, returning None only when no key is configured."""
     if not ciphertext:
         return None
     try:
         return decrypt_value(ciphertext)
-    except Exception:
+    except Exception as exc:
+        raise RuntimeError("Configured API key could not be decrypted") from exc
+
+
+_VALID_SEVERITIES = {"critical", "high", "medium", "low", "info"}
+
+
+def _trim_text(value: object, limit: int) -> str:
+    """Convert a value to text and cap it before persistence."""
+    return str(value)[:limit]
+
+
+def _normalize_finding(raw: dict) -> dict | None:
+    """Validate and normalize one agent finding before database insert."""
+    required = ("agent_name", "finding_type", "severity", "file_path", "message")
+    if not isinstance(raw, dict) or any(not raw.get(key) for key in required):
         return None
+
+    severity = str(raw.get("severity", "")).lower()
+    if severity not in _VALID_SEVERITIES:
+        return None
+
+    try:
+        line_number = int(raw.get("line_number", 0) or 0)
+    except (TypeError, ValueError):
+        return None
+
+    return {
+        "agent_name": _trim_text(raw["agent_name"], 100),
+        "finding_type": _trim_text(raw["finding_type"], 150),
+        "severity": severity,
+        "file_path": _trim_text(raw["file_path"], 1000),
+        "line_number": max(0, line_number),
+        "message": _trim_text(raw["message"], 4000),
+        "suggestion": _trim_text(raw["suggestion"], 4000) if raw.get("suggestion") else None,
+        "code_snippet": _trim_text(raw["code_snippet"], 2000) if raw.get("code_snippet") else None,
+        "category": _trim_text(raw["category"], 100) if raw.get("category") else None,
+        "is_duplicate": bool(raw.get("is_duplicate", False)),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +115,7 @@ async def run_analysis(review_id: uuid.UUID) -> None:
             )
             # Attempt to persist the error status.
             await _mark_error(review_id, str(exc))
+            raise
 
 
 async def _run_analysis_inner(session: AsyncSession, review_id: uuid.UUID) -> None:
@@ -102,6 +140,10 @@ async def _run_analysis_inner(session: AsyncSession, review_id: uuid.UUID) -> No
 
     if review is None:
         raise ValueError(f"Review {review_id} not found")
+
+    review.status = "analyzing"
+    review.error_message = None
+    review.completed_at = None
 
     repo_result = await session.get(Repository, review.repo_id)
     if repo_result is None:
@@ -129,9 +171,8 @@ async def _run_analysis_inner(session: AsyncSession, review_id: uuid.UUID) -> No
             installation_id=repo_result.github_installation_id,
         )
     else:
-        logger.warning(
-            "GitHub client not configured; skipping file fetch for review %s",
-            review_id,
+        raise RuntimeError(
+            "GitHub App credentials or installation ID are not configured; cannot fetch PR diff"
         )
 
     # ── 3. Extract code chunks ─────────────────────────────────────────────────
@@ -174,8 +215,13 @@ async def _run_analysis_inner(session: AsyncSession, review_id: uuid.UUID) -> No
         on_progress=_on_progress,
     )
 
+    if agent_results and all(
+        result.get("status") == "error" for result in agent_results.values()
+    ):
+        raise RuntimeError("All selected analysis agents failed")
+
     # ── 4b. Deduplicate and rank findings ─────────────────────────────────────
-    all_findings = aggregate(all_findings)
+    all_findings = [f for f in (_normalize_finding(f) for f in aggregate(all_findings)) if f]
 
     # ── 5. Persist findings and agent execution records ────────────────────────
     now = datetime.now(timezone.utc)

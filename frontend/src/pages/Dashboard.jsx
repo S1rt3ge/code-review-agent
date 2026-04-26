@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useApi } from '@/hooks/useApi.js'
 import { StatusBadge } from '@/components/StatusBadge.jsx'
@@ -27,8 +27,8 @@ import { StatusBadge } from '@/components/StatusBadge.jsx'
 /**
  * @typedef {Object} Repository
  * @property {string} id
- * @property {string} owner
- * @property {string} name
+ * @property {string} github_repo_owner
+ * @property {string} github_repo_name
  */
 
 // ---------------------------------------------------------------------------
@@ -260,6 +260,7 @@ const ALL_AGENTS = ['security', 'performance', 'style', 'logic']
 function NewReviewModal({ onClose }) {
   const navigate = useNavigate()
   const { get, post } = useApi()
+  const dialogRef = useRef(null)
 
   /** @type {[Repository[], function]} */
   const [repos, setRepos] = useState([])
@@ -281,6 +282,38 @@ function NewReviewModal({ onClose }) {
       .catch(() => setRepos([]))
       .finally(() => setReposLoading(false))
   }, [get])
+
+  useEffect(() => {
+    const firstInput = dialogRef.current?.querySelector('select, input, button')
+    firstInput?.focus()
+
+    const onKeyDown = event => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
+  function handleBackdropMouseDown(event) {
+    if (event.target === event.currentTarget) onClose()
+  }
+
+  function handleDialogKeyDown(event) {
+    if (event.key !== 'Tab') return
+    const focusable = Array.from(
+      dialogRef.current?.querySelectorAll('button, input, select, a[href]') ?? []
+    ).filter(el => !el.disabled)
+    if (focusable.length === 0) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
 
   /**
    * Toggle an agent checkbox.
@@ -315,11 +348,16 @@ function NewReviewModal({ onClose }) {
       className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
-      aria-label="New Review"
+      aria-labelledby="new-review-title"
+      onMouseDown={handleBackdropMouseDown}
     >
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700">
+      <div
+        ref={dialogRef}
+        onKeyDown={handleDialogKeyDown}
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700"
+      >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+          <h2 id="new-review-title" className="text-base font-semibold text-gray-900 dark:text-white">
             New Review
           </h2>
           <button
@@ -360,7 +398,7 @@ function NewReviewModal({ onClose }) {
               >
                 {repos.map(r => (
                   <option key={r.id} value={r.id}>
-                    {r.owner}/{r.name}
+                    {r.github_repo_owner}/{r.github_repo_name}
                   </option>
                 ))}
               </select>
@@ -605,9 +643,9 @@ export function Dashboard() {
                 <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Add your repository</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                   Go to the{' '}
-                  <a href="/repositories" className="text-blue-600 dark:text-blue-400 hover:underline">
+                  <Link to="/repositories" className="text-blue-600 dark:text-blue-400 hover:underline">
                     Add your repository
-                  </a>
+                  </Link>
                   {' '}page to connect a GitHub repo and get the webhook URL to configure in GitHub.
                 </p>
               </div>
@@ -652,7 +690,7 @@ export function Dashboard() {
                   {reviews.map(review => (
                     <tr
                       key={review.id}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                     >
                       <td className="py-3 px-4">
                         <span className="font-medium text-gray-800 dark:text-gray-200">

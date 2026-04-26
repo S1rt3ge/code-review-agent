@@ -4,7 +4,7 @@ FROM node:20-alpine AS frontend-builder
 WORKDIR /frontend
 
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --legacy-peer-deps
+RUN npm ci
 
 COPY frontend/ ./
 RUN npm run build
@@ -22,7 +22,8 @@ WORKDIR /app
 
 # Install Python dependencies first (better layer caching)
 COPY requirements.in requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip uninstall -y pytest pytest-asyncio pytest-cov ruff
 
 # Copy backend source
 COPY backend/ ./backend/
@@ -41,6 +42,9 @@ RUN useradd -m -u 1001 appuser \
 USER appuser
 
 EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()" || exit 1
 
 # Runs migrations then starts the server
 # Use sh explicitly to avoid CRLF shebang issues on Windows-built images

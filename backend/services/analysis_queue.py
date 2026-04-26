@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 try:
     from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -20,7 +21,7 @@ except Exception:  # pragma: no cover - fallback for non-postgres test envs
     pg_insert = None
 
 from backend.config import settings
-from backend.models.db_models import AnalysisJob
+from backend.models.db_models import AnalysisJob, Review
 from backend.services.analyzer import run_analysis
 from backend.utils.database import async_session_factory
 
@@ -30,35 +31,44 @@ _worker_task: asyncio.Task | None = None
 _instance_id = f"{socket.gethostname()}:{uuid.uuid4().hex[:8]}"
 
 
-async def enqueue_analysis(review_id: uuid.UUID) -> None:
+async def enqueue_analysis(review_id: uuid.UUID, session: AsyncSession | None = None) -> None:
     """Create or reset a durable analysis job for a review."""
+    if session is not None:
+        await _enqueue_analysis_in_session(session, review_id)
+        return
+
+    async with async_session_factory() as owned_session:
+        await _enqueue_analysis_in_session(owned_session, review_id)
+        await owned_session.commit()
+
+
+async def _enqueue_analysis_in_session(session: AsyncSession, review_id: uuid.UUID) -> None:
+    """Create or reset an analysis job using the caller's transaction."""
     now = datetime.now(timezone.utc)
 
     if pg_insert is None or not callable(pg_insert):
-        async with async_session_factory() as session:
-            result = await session.execute(
-                select(AnalysisJob).where(AnalysisJob.review_id == review_id)
-            )
-            job = result.scalar_one_or_none()
-            if job is None:
-                session.add(
-                    AnalysisJob(
-                        review_id=review_id,
-                        status="pending",
-                        attempts=0,
-                        next_run_at=now,
-                    )
+        result = await session.execute(
+            select(AnalysisJob).where(AnalysisJob.review_id == review_id)
+        )
+        job = result.scalar_one_or_none()
+        if job is None:
+            session.add(
+                AnalysisJob(
+                    review_id=review_id,
+                    status="pending",
+                    attempts=0,
+                    next_run_at=now,
                 )
-            else:
-                job.status = "pending"
-                job.attempts = 0
-                job.next_run_at = now
-                job.locked_at = None
-                job.locked_by = None
-                job.error_message = None
-                job.completed_at = None
-            await session.commit()
-            return
+            )
+        else:
+            job.status = "pending"
+            job.attempts = 0
+            job.next_run_at = now
+            job.locked_at = None
+            job.locked_by = None
+            job.error_message = None
+            job.completed_at = None
+        return
 
     upsert_stmt = (
         pg_insert(AnalysisJob)
@@ -86,9 +96,7 @@ async def enqueue_analysis(review_id: uuid.UUID) -> None:
         )
     )
 
-    async with async_session_factory() as session:
-        await session.execute(upsert_stmt)
-        await session.commit()
+    await session.execute(upsert_stmt)
 
 
 async def startup() -> None:
@@ -241,6 +249,26 @@ async def _process_job(job: AnalysisJob) -> None:
             pass
 
 
+async def _set_review_state(
+    session: AsyncSession,
+    review_id: uuid.UUID,
+    *,
+    review_status: str,
+    error_message: str | None,
+    completed_at: datetime | None = None,
+) -> None:
+    """Best-effort sync from durable job state to review state."""
+    if not hasattr(session, "get"):
+        return
+    review = await session.get(Review, review_id)
+    if review is None:
+        return
+    review.status = review_status
+    review.error_message = error_message
+    if completed_at is not None:
+        review.completed_at = completed_at
+
+
 async def _heartbeat_lock(job_id: uuid.UUID) -> None:
     """Periodically refresh lock timestamp while a job is running."""
     while True:
@@ -283,17 +311,33 @@ async def _recover_stale_running_jobs() -> int:
 
         now = datetime.now(timezone.utc)
         for job in stale_jobs:
+            job.attempts += 1
             if job.attempts >= settings.analysis_queue_max_attempts:
                 job.status = "error"
                 job.completed_at = now
                 job.error_message = (
                     "Analysis job exceeded retry limit after stale lock recovery"
                 )
+                if getattr(job, "review_id", None) is not None:
+                    await _set_review_state(
+                        session,
+                        job.review_id,
+                        review_status="error",
+                        error_message=job.error_message,
+                        completed_at=now,
+                    )
             else:
                 job.status = "pending"
                 job.next_run_at = now
                 job.locked_at = None
                 job.locked_by = None
+                if getattr(job, "review_id", None) is not None:
+                    await _set_review_state(
+                        session,
+                        job.review_id,
+                        review_status="pending",
+                        error_message="Analysis job recovered after worker interruption",
+                    )
 
         await session.commit()
         recovered = len(stale_jobs)
@@ -335,11 +379,24 @@ async def _mark_job_error(job_id: uuid.UUID, message: str) -> None:
         if job.attempts >= settings.analysis_queue_max_attempts:
             job.status = "error"
             job.completed_at = now
+            await _set_review_state(
+                session,
+                job.review_id,
+                review_status="error",
+                error_message=job.error_message,
+                completed_at=now,
+            )
         else:
             delay = settings.analysis_queue_base_retry_seconds * (
                 2 ** (job.attempts - 1)
             )
             job.status = "pending"
             job.next_run_at = now + timedelta(seconds=delay)
+            await _set_review_state(
+                session,
+                job.review_id,
+                review_status="pending",
+                error_message=f"Analysis failed; retry scheduled in {delay} seconds",
+            )
 
         await session.commit()

@@ -7,6 +7,8 @@ Classes:
 
 import logging
 
+from cryptography.fernet import Fernet
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -32,6 +34,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(
         default=["http://localhost:5173", "http://localhost:3000"],
     )
+    trust_proxy_headers: bool = Field(default=False, alias="TRUST_PROXY_HEADERS")
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -77,6 +80,7 @@ class Settings(BaseSettings):
         default=15,
         alias="ANALYSIS_QUEUE_LOCK_HEARTBEAT_SECONDS",
     )
+    webhook_max_body_bytes: int = Field(default=5_000_000, alias="WEBHOOK_MAX_BODY_BYTES")
 
     @field_validator("database_url", mode="before")
     @classmethod
@@ -86,6 +90,8 @@ class Settings(BaseSettings):
         Railway (and many PaaS providers) inject ``postgresql://`` URLs.
         SQLAlchemy's async engine requires ``postgresql+psycopg://``.
         """
+        if isinstance(v, str) and v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql+psycopg://", 1)
         if isinstance(v, str) and v.startswith("postgresql://"):
             return v.replace("postgresql://", "postgresql+psycopg://", 1)
         return v
@@ -94,6 +100,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
     ollama_host: str = "http://localhost:11434"
+    allow_private_ollama_hosts: bool = Field(
+        default=False,
+        alias="ALLOW_PRIVATE_OLLAMA_HOSTS",
+    )
 
     # Observability
     sentry_dsn: str | None = Field(default=None, alias="SENTRY_DSN")
@@ -196,6 +206,18 @@ if _should_reject_default_jwt_secret(settings.app_env, settings.jwt_secret):
     )
     _logger.critical(message)
     raise RuntimeError(message)
+
+if settings.app_env.lower() not in _NON_ENFORCED_ENVS:
+    if not settings.fernet_key:
+        message = "FERNET_KEY is required in non-dev environments."
+        _logger.critical(message)
+        raise RuntimeError(message)
+    try:
+        Fernet(settings.fernet_key.encode())
+    except Exception as exc:
+        message = "FERNET_KEY is not a valid Fernet key."
+        _logger.critical(message)
+        raise RuntimeError(message) from exc
 
 if not settings.github_webhook_secret:
     _logger.warning(

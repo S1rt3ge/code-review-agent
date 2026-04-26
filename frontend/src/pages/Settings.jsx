@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { useApi } from '@/hooks/useApi.js'
 import { LLMSelector } from '@/components/LLMSelector.jsx'
 
@@ -36,11 +37,12 @@ const ALL_AGENTS = [
  *   value: string,
  *   onChange: (v: string) => void,
  *   placeholder?: string,
- *   isSet?: boolean
+ *   isSet?: boolean,
+ *   autoComplete?: string
  * }} props
  * @returns {React.ReactElement}
  */
-function ApiKeyInput({ id, label, value, onChange, placeholder, isSet }) {
+function ApiKeyInput({ id, label, value, onChange, placeholder, isSet, autoComplete = 'off' }) {
   const [visible, setVisible] = useState(false)
 
   return (
@@ -58,6 +60,7 @@ function ApiKeyInput({ id, label, value, onChange, placeholder, isSet }) {
           value={value}
           onChange={e => onChange(e.target.value)}
           placeholder={isSet ? '••••••••  (leave blank to keep current)' : placeholder}
+          autoComplete={autoComplete}
           className="w-full pr-10 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button
@@ -146,6 +149,10 @@ export function Settings() {
   }, [loadSettings])
 
   const handleSave = useCallback(async () => {
+    if (selectedAgents.length === 0) {
+      setSaveMsg('Failed to save: select at least one default agent')
+      return
+    }
     setSaving(true)
     setSaveMsg(null)
     try {
@@ -222,9 +229,9 @@ export function Settings() {
         </p>
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
           Didn&apos;t verify your email yet?{' '}
-          <a href="/resend-verification" className="text-blue-600 dark:text-blue-400 hover:underline">
+          <Link to="/resend-verification" className="text-blue-600 dark:text-blue-400 hover:underline">
             Resend verification link
-          </a>
+          </Link>
         </p>
       </div>
 
@@ -243,6 +250,7 @@ export function Settings() {
           onChange={setApiKeyClaude}
           placeholder="sk-ant-..."
           isSet={settings?.api_key_claude_set}
+          autoComplete="off"
         />
         <p className="text-xs text-gray-400 dark:text-gray-500 -mt-2">
           Get your key at{' '}
@@ -258,6 +266,7 @@ export function Settings() {
           onChange={setApiKeyGpt}
           placeholder="sk-..."
           isSet={settings?.api_key_gpt_set}
+          autoComplete="off"
         />
         <p className="text-xs text-gray-400 dark:text-gray-500 -mt-2">
           Get your key at{' '}
@@ -421,6 +430,11 @@ export function Settings() {
             )
           })}
         </div>
+        {selectedAgents.length === 0 && (
+          <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+            Select at least one default agent.
+          </p>
+        )}
       </section>
 
       {/* Save + test */}
@@ -428,7 +442,7 @@ export function Settings() {
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || selectedAgents.length === 0}
           className="px-5 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {saving ? 'Saving…' : 'Save Settings'}
