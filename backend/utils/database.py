@@ -7,7 +7,9 @@ Functions:
     get_db: FastAPI dependency that yields an async database session.
 """
 
+import asyncio
 import logging
+import sys
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
@@ -20,6 +22,10 @@ from sqlalchemy.orm import DeclarativeBase
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
+
+if sys.platform == "win32":
+    # psycopg async connections are incompatible with ProactorEventLoop.
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 engine = create_async_engine(
     settings.database_url,
