@@ -11,6 +11,24 @@ const STATS_RESPONSE = {
   estimated_cost_this_month: 0.45,
 }
 
+const EMPTY_STATS_RESPONSE = {
+  total_reviews: 0,
+  reviews_today: 0,
+  tokens_used_this_month: 0,
+  estimated_cost_this_month: 0,
+}
+
+const EMPTY_REPOSITORIES_RESPONSE = {
+  repositories: [],
+  total: 0,
+}
+
+const DEFAULT_SETTINGS_RESPONSE = {
+  api_key_claude_set: false,
+  api_key_gpt_set: false,
+  ollama_enabled: false,
+}
+
 const REVIEWS_RESPONSE = {
   reviews: [
     {
@@ -120,15 +138,91 @@ describe('Dashboard page', () => {
 
   it('shows empty state when there are no reviews', async () => {
     fetch
-      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(EMPTY_STATS_RESPONSE), { status: 200 }))
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ reviews: [], total: 0 }), { status: 200 })
       )
+      .mockResolvedValueOnce(new Response(JSON.stringify(EMPTY_REPOSITORIES_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(DEFAULT_SETTINGS_RESPONSE), { status: 200 }))
 
     renderDashboard()
 
     await waitFor(() => {
       expect(screen.getByText('No reviews yet')).toBeInTheDocument()
+      expect(screen.getByText('Setup checklist')).toBeInTheDocument()
+      expect(screen.getByText('1 of 5 complete')).toBeInTheDocument()
+    })
+  })
+
+  it('updates checklist progress from repositories and settings', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(EMPTY_STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ reviews: [], total: 0 }), { status: 200 })
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        repositories: [{
+          id: 'repo-1',
+          github_repo_owner: 'octocat',
+          github_repo_name: 'hello-world',
+          enabled: true,
+        }],
+        total: 1,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...DEFAULT_SETTINGS_RESPONSE,
+        ollama_enabled: true,
+      }), { status: 200 }))
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByText('4 of 5 complete')).toBeInTheDocument()
+      expect(screen.getByText('octocat/hello-world is connected.')).toBeInTheDocument()
+      expect(screen.getByText('A local Ollama or BYOK cloud provider is configured.')).toBeInTheDocument()
+    })
+  })
+
+  it('loads demo data from the empty state CTA', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(EMPTY_STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ reviews: [], total: 0 }), { status: 200 })
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify(EMPTY_REPOSITORIES_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(DEFAULT_SETTINGS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ first_review_id: 'demo-review-1' }), { status: 200 })
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...STATS_RESPONSE, total_reviews: 3 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(REVIEWS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        repositories: [{
+          id: 'repo-demo',
+          github_repo_owner: 'demo-org',
+          github_repo_name: 'checkout-service',
+          enabled: true,
+        }],
+        total: 1,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(DEFAULT_SETTINGS_RESPONSE), { status: 200 }))
+
+    renderDashboard()
+
+    const button = await screen.findByRole('button', { name: 'Load demo data' })
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/settings',
+        expect.objectContaining({ method: 'GET' })
+      )
+    })
+    fireEvent.click(button)
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/demo/seed',
+        expect.objectContaining({ method: 'POST' })
+      )
     })
   })
 

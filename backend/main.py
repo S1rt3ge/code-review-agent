@@ -33,7 +33,7 @@ from sqlalchemy import select, text
 from backend.config import settings
 from backend.models.db_models import Review
 from backend.models.schemas import HealthResponse
-from backend.routers import auth, dashboard, github, repositories, reviews
+from backend.routers import auth, dashboard, demo, github, repositories, reviews
 from backend.routers import settings as settings_router
 from backend.services import analysis_queue
 from backend.services.ws_manager import ws_manager
@@ -131,6 +131,7 @@ app.include_router(reviews.router, prefix="/api")
 app.include_router(settings_router.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(repositories.router, prefix="/api")
+app.include_router(demo.router, prefix="/api")
 
 # ---------------------------------------------------------------------------
 # Health check

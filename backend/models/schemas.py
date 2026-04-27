@@ -328,6 +328,23 @@ class DashboardStatsResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Demo mode
+# ---------------------------------------------------------------------------
+
+
+class DemoSeedResponse(BaseModel):
+    """Response returned after loading local demo data."""
+
+    repository_id: UUID
+    review_ids: list[UUID]
+    first_review_id: UUID | None = None
+    reviews_created: int
+    findings_created: int
+    agent_executions_created: int
+    analysis_jobs_created: int
+
+
+# ---------------------------------------------------------------------------
 # GitHub Webhook
 # ---------------------------------------------------------------------------
 

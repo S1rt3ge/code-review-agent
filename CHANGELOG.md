@@ -7,6 +7,12 @@ The format is inspired by Keep a Changelog and follows semantic-style sections.
 ## [Unreleased]
 
 ### Added
+- Demo Mode seed flow for local self-hosted demos:
+  - Adds a guarded `/api/demo/seed` endpoint for non-production environments.
+  - Seeds demo repository, reviews, findings, agent executions, and analysis queue records.
+  - Adds a dashboard empty-state CTA to load demo data without GitHub or LLM credentials.
+- First-run dashboard setup checklist with progress from repository, webhook-readiness, LLM provider, and review data.
+- Local demo documentation in `docs/local-demo.md`.
 - Release process baseline docs and workflow:
   - `docs/release-checklist.md`
   - `.github/workflows/release.yml`

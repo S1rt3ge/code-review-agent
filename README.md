@@ -247,6 +247,28 @@ This keeps CI/runtime deterministic while still allowing local development on Wi
 
 ## Local Development
 
+### Run Local Demo In 5 Minutes
+
+The self-hosted demo path does not require a GitHub App, webhook tunnel, hosted LLM key, paid domain, or paid infrastructure.
+
+```bash
+docker compose up -d postgres
+python scripts/migrate.py
+uvicorn backend.main:app --reload
+```
+
+In a second terminal:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Open `http://localhost:5173`, create an account, sign in, and click `Load demo data` on the empty dashboard. The demo seed creates a realistic repository, completed reviews, findings, agent execution history, and queue records for your user.
+
+Demo seeding is intentionally blocked outside local/demo/test environments. See `docs/local-demo.md` for the full walkthrough.
+
 ### Prerequisites
 
 - Python 3.12
