@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useApi } from '@/hooks/useApi.js'
 import { StatusBadge } from '@/components/StatusBadge.jsx'
+import { useAuthStore } from '@/store/index.js'
 
 /**
  * @typedef {Object} DashboardStats
@@ -29,6 +30,15 @@ import { StatusBadge } from '@/components/StatusBadge.jsx'
  * @property {string} id
  * @property {string} github_repo_owner
  * @property {string} github_repo_name
+ * @property {number|null} [github_installation_id]
+ * @property {boolean} [enabled]
+ */
+
+/**
+ * @typedef {Object} SettingsSummary
+ * @property {boolean} api_key_claude_set
+ * @property {boolean} api_key_gpt_set
+ * @property {boolean} ollama_enabled
  */
 
 // ---------------------------------------------------------------------------
@@ -88,6 +98,144 @@ function TableSkeleton() {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Setup checklist
+// ---------------------------------------------------------------------------
+
+/**
+ * @param {{ done: boolean, title: string, description: React.ReactNode, to?: string, actionLabel?: string }} props
+ * @returns {React.ReactElement}
+ */
+function ChecklistItem({ done, title, description, to, actionLabel }) {
+  return (
+    <div className="flex gap-4 px-6 py-5">
+      <div
+        className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
+          done
+            ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300'
+            : 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400'
+        }`}
+        aria-hidden="true"
+      >
+        {done ? (
+          <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
+            <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : (
+          <span className="w-2 h-2 rounded-full bg-current" />
+        )}
+      </div>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{title}</p>
+          {done && (
+            <span className="text-xs font-medium text-green-600 dark:text-green-400">Complete</span>
+          )}
+        </div>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{description}</p>
+        {to && !done && (
+          <Link to={to} className="inline-block mt-2 text-sm text-blue-600 dark:text-blue-400 hover:underline">
+            {actionLabel ?? `Open ${title.toLowerCase()}`}
+          </Link>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * First-run setup checklist shown while the dashboard has no reviews.
+ * @param {{ user: object|null, repositories: Repository[], settings: SettingsSummary|null, totalReviews: number }} props
+ * @returns {React.ReactElement}
+ */
+function SetupChecklist({ user, repositories, settings, totalReviews }) {
+  const hasRepository = repositories.length > 0
+  const hasLlmProvider = Boolean(
+    settings?.ollama_enabled || settings?.api_key_claude_set || settings?.api_key_gpt_set
+  )
+  const hasWebhookReadyRepo = repositories.some(repo => repo.enabled !== false)
+
+  const items = [
+    {
+      key: 'account',
+      done: Boolean(user),
+      title: 'Create account',
+      description: 'You are signed in, so review history and settings can be saved locally.',
+    },
+    {
+      key: 'repository',
+      done: hasRepository,
+      title: 'Add repository',
+      to: '/repositories',
+      actionLabel: 'Open repositories',
+      description: hasRepository
+        ? `${repositories[0].github_repo_owner}/${repositories[0].github_repo_name} is connected.`
+        : 'Connect the GitHub repository you want the agent to review.',
+    },
+    {
+      key: 'webhook',
+      done: hasWebhookReadyRepo,
+      title: 'Configure webhook',
+      to: '/repositories',
+      actionLabel: 'View webhook setup',
+      description: hasWebhookReadyRepo
+        ? 'Webhook URL and secret instructions are available on the repository page.'
+        : 'After adding a repository, copy the local webhook URL into GitHub.',
+    },
+    {
+      key: 'llm',
+      done: hasLlmProvider,
+      title: 'Choose LLM provider',
+      to: '/settings',
+      actionLabel: 'Open settings',
+      description: hasLlmProvider
+        ? 'A local Ollama or BYOK cloud provider is configured.'
+        : 'Use free local Ollama or bring your own Claude/OpenAI key.',
+    },
+    {
+      key: 'review',
+      done: totalReviews > 0,
+      title: 'Run first review',
+      description: 'Open or update a PR, start a manual review, or load demo data below.',
+    },
+  ]
+
+  const completed = items.filter(item => item.done).length
+
+  return (
+    <div className="border-t border-gray-100 dark:border-gray-700">
+      <div className="px-6 py-5 bg-gray-50 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-700">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Setup checklist</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              {completed} of {items.length} complete
+            </p>
+          </div>
+          <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden sm:w-48" aria-hidden="true">
+            <div
+              className="h-full bg-blue-600 dark:bg-blue-500 rounded-full transition-all duration-500"
+              style={{ width: `${Math.round((completed / items.length) * 100)}%` }}
+            />
+          </div>
+        </div>
+      </div>
+      <div className="divide-y divide-gray-100 dark:divide-gray-700">
+        {items.map(item => (
+          <ChecklistItem
+            key={item.key}
+            done={item.done}
+            title={item.title}
+            description={item.description}
+            to={item.to}
+            actionLabel={item.actionLabel}
+          />
+        ))}
+      </div>
     </div>
   )
 }
@@ -503,18 +651,28 @@ function formatRelativeTime(isoDate) {
  * @returns {React.ReactElement}
  */
 export function Dashboard() {
+  const navigate = useNavigate()
+  const user = useAuthStore(state => state.user)
   /** @type {[DashboardStats|null, function]} */
   const [stats, setStats] = useState(null)
   /** @type {[ReviewSummary[], function]} */
   const [reviews, setReviews] = useState([])
+  /** @type {[Repository[], function]} */
+  const [setupRepos, setSetupRepos] = useState([])
+  /** @type {[SettingsSummary|null, function]} */
+  const [setupSettings, setSetupSettings] = useState(null)
   const [statsLoading, setStatsLoading] = useState(true)
   const [reviewsLoading, setReviewsLoading] = useState(true)
+  const [setupLoading, setSetupLoading] = useState(false)
   const [statsError, setStatsError] = useState(null)
   const [reviewsError, setReviewsError] = useState(null)
+  const [setupError, setSetupError] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [demoLoading, setDemoLoading] = useState(false)
+  const [demoError, setDemoError] = useState(null)
 
-  const { get } = useApi()
+  const { get, post } = useApi()
 
   const fetchStats = useCallback(async () => {
     setStatsLoading(true)
@@ -543,10 +701,49 @@ export function Dashboard() {
     }
   }, [get])
 
+  const fetchSetupProgress = useCallback(async () => {
+    setSetupLoading(true)
+    setSetupError(null)
+    try {
+      const [repoData, settingsData] = await Promise.all([
+        get('/repositories'),
+        get('/settings'),
+      ])
+      setSetupRepos(Array.isArray(repoData) ? repoData : (repoData.repositories ?? []))
+      setSetupSettings(settingsData)
+    } catch (err) {
+      setSetupError(err instanceof Error ? err.message : 'Failed to load setup progress')
+    } finally {
+      setSetupLoading(false)
+    }
+  }, [get])
+
   useEffect(() => {
     fetchStats()
     fetchReviews(statusFilter)
   }, [fetchStats, fetchReviews]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (
+      statsLoading ||
+      reviewsLoading ||
+      statsError ||
+      reviewsError ||
+      statusFilter !== '' ||
+      reviews.length > 0
+    ) {
+      return
+    }
+    fetchSetupProgress()
+  }, [
+    fetchSetupProgress,
+    reviews.length,
+    reviewsError,
+    reviewsLoading,
+    statsError,
+    statsLoading,
+    statusFilter,
+  ])
 
   /**
    * Handle status filter change: update state and refetch.
@@ -555,6 +752,24 @@ export function Dashboard() {
   function handleFilterChange(value) {
     setStatusFilter(value)
     fetchReviews(value)
+  }
+
+  async function handleLoadDemoData() {
+    setDemoLoading(true)
+    setDemoError(null)
+    try {
+      const result = await post('/demo/seed', {})
+      setStatusFilter('')
+      await Promise.all([fetchStats(), fetchReviews('')])
+      await fetchSetupProgress()
+      if (result.first_review_id) {
+        navigate(`/reviews/${result.first_review_id}`)
+      }
+    } catch (err) {
+      setDemoError(err instanceof Error ? err.message : 'Failed to load demo data')
+    } finally {
+      setDemoLoading(false)
+    }
   }
 
   return (
@@ -623,43 +838,50 @@ export function Dashboard() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Follow the steps below to get your first automated code review.
             </p>
+            <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={handleLoadDemoData}
+                disabled={demoLoading}
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+              >
+                {demoLoading ? 'Loading demo data...' : 'Load demo data'}
+              </button>
+              <Link
+                to="/repositories"
+                className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors"
+              >
+                Add repository instead
+              </Link>
+            </div>
+            {demoError && (
+              <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+                {demoError}
+              </p>
+            )}
           </div>
 
-          <div className="divide-y divide-gray-100 dark:divide-gray-700">
-            <div className="px-6 py-5 flex gap-4">
-              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">1</div>
-              <div>
-                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Configure an LLM provider</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                  Go to{' '}
-                  <Link to="/settings" className="text-blue-600 dark:text-blue-400 hover:underline">Settings</Link>
-                  {' '}and add an API key for Claude or GPT, or set up a local Ollama instance.
-                </p>
+          {setupLoading ? (
+            <div className="px-6 py-8 border-t border-gray-100 dark:border-gray-700">
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32 mb-4 animate-pulse" />
+              <div className="space-y-3">
+                {[0, 1, 2].map(i => (
+                  <div key={i} className="h-12 bg-gray-100 dark:bg-gray-700 rounded animate-pulse" />
+                ))}
               </div>
             </div>
-            <div className="px-6 py-5 flex gap-4">
-              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">2</div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Add your repository</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                  Go to the{' '}
-                  <Link to="/repositories" className="text-blue-600 dark:text-blue-400 hover:underline">
-                    Add your repository
-                  </Link>
-                  {' '}page to connect a GitHub repo and get the webhook URL to configure in GitHub.
-                </p>
-              </div>
+          ) : setupError ? (
+            <div className="px-6 py-5 border-t border-gray-100 dark:border-gray-700 text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950">
+              Setup progress unavailable: {setupError}
             </div>
-            <div className="px-6 py-5 flex gap-4">
-              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">3</div>
-              <div>
-                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Open a Pull Request</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                  Create or update a PR in the connected repository. The agent will automatically analyze it and post a comment with findings.
-                </p>
-              </div>
-            </div>
-          </div>
+          ) : (
+            <SetupChecklist
+              user={user}
+              repositories={setupRepos}
+              settings={setupSettings}
+              totalReviews={stats?.total_reviews ?? 0}
+            />
+          )}
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
