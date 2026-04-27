@@ -1,5 +1,5 @@
 fastapi>=0.104
-uvicorn>=0.24
+uvicorn>=0.46.0
 sqlalchemy>=2.0
 psycopg[binary]>=3.1
 asyncpg>=0.29
