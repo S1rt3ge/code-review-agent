@@ -373,6 +373,61 @@ async def test_protected_route_rejects_bad_token(client):
 
 
 # ---------------------------------------------------------------------------
+# Demo mode
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_demo_seed_creates_review_history(client, auth_headers):
+    r = await client.post("/api/demo/seed", headers=auth_headers)
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["reviews_created"] == 3
+    assert body["findings_created"] == 7
+    assert body["agent_executions_created"] == 12
+    assert body["analysis_jobs_created"] == 3
+    assert body["first_review_id"] in body["review_ids"]
+
+    detail = await client.get(
+        f"/api/reviews/{body['first_review_id']}",
+        headers=auth_headers,
+    )
+    assert detail.status_code == 200, detail.text
+    review = detail.json()
+    assert review["status"] == "done"
+    assert review["github_pr_title"] == "Harden OAuth callback handling"
+    assert len(review["findings"]) == 4
+    assert len(review["agent_executions"]) == 4
+
+    stats = await client.get("/api/dashboard/stats", headers=auth_headers)
+    assert stats.status_code == 200, stats.text
+    stats_body = stats.json()
+    assert stats_body["total_reviews"] == 3
+    assert stats_body["findings_by_severity"]["critical"] == 1
+    assert stats_body["findings_by_agent"]["performance"] == 2
+
+    repeat = await client.post("/api/demo/seed", headers=auth_headers)
+    assert repeat.status_code == 200, repeat.text
+    assert repeat.json()["first_review_id"] == body["first_review_id"]
+
+    reviews = await client.get("/api/reviews?limit=10", headers=auth_headers)
+    assert reviews.status_code == 200, reviews.text
+    assert reviews.json()["total"] == 3
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_demo_seed_http_guard_blocks_production(client, auth_headers):
+    with patch("backend.routers.demo.settings.app_env", "production"):
+        r = await client.post("/api/demo/seed", headers=auth_headers)
+
+    assert r.status_code == 403
+    assert "local development or demo" in r.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
 # Review lifecycle
 # ---------------------------------------------------------------------------
 
