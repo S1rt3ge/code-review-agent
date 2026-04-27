@@ -19,6 +19,7 @@ import { LLMSelector } from '@/components/LLMSelector.jsx'
  * @property {boolean} claude_available
  * @property {boolean} gpt_available
  * @property {boolean} ollama_available
+ * @property {string} [error]
  */
 
 const ALL_AGENTS = [
@@ -98,6 +99,41 @@ function AvailabilityRow({ available, label }) {
       <span className={`ml-auto text-xs font-medium ${available ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
         {available ? 'Available' : 'Not available'}
       </span>
+    </div>
+  )
+}
+
+/**
+ * Provider configuration and optional live availability status card.
+ * @param {{ title: string, description: string, configured: boolean, available?: boolean|null, recommended?: boolean, costNote: string }} props
+ * @returns {React.ReactElement}
+ */
+function ProviderStatusCard({ title, description, configured, available = null, recommended = false, costNote }) {
+  const hasLiveStatus = typeof available === 'boolean'
+  const statusLabel = hasLiveStatus
+    ? available ? 'Available' : 'Not reachable'
+    : configured ? 'Configured' : 'Not configured'
+  const statusClass = hasLiveStatus
+    ? available ? 'text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900' : 'text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900'
+    : configured ? 'text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900' : 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700'
+
+  return (
+    <div className={`rounded-lg border p-4 space-y-3 ${recommended ? 'border-blue-300 dark:border-blue-700 bg-blue-50/60 dark:bg-blue-950/40' : 'border-gray-200 dark:border-gray-700'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">{title}</h3>
+          {recommended && (
+            <p className="mt-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">
+              Recommended free/local path
+            </p>
+          )}
+        </div>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${statusClass}`}>
+          {statusLabel}
+        </span>
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
+      <p className="text-xs text-gray-400 dark:text-gray-500">{costNote}</p>
     </div>
   )
 }
@@ -204,6 +240,10 @@ export function Settings() {
     )
   }, [])
 
+  const liveAvailability = testResult && !testResult.error ? testResult : null
+  const claudeConfigured = Boolean(settings?.api_key_claude_set || apiKeyClaude)
+  const gptConfigured = Boolean(settings?.api_key_gpt_set || apiKeyGpt)
+
   if (loading && !settings) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -225,7 +265,7 @@ export function Settings() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Configure LLM providers, API keys, and default agents.
+          Configure local Ollama, BYOK cloud providers, and default agents.
         </p>
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
           Didn&apos;t verify your email yet?{' '}
@@ -235,61 +275,50 @@ export function Settings() {
         </p>
       </div>
 
-      {/* API Keys */}
+      {/* Provider status */}
       <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 space-y-4">
         <div>
-          <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200">API Keys</h2>
+          <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200">Provider Setup</h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Keys are encrypted at rest. You only need one provider — Claude is recommended for best accuracy.
+            Start with local Ollama for a free self-hosted demo, or bring your own Claude/OpenAI keys for hosted models.
           </p>
         </div>
-        <ApiKeyInput
-          id="api-key-claude"
-          label="Anthropic Claude"
-          value={apiKeyClaude}
-          onChange={setApiKeyClaude}
-          placeholder="sk-ant-..."
-          isSet={settings?.api_key_claude_set}
-          autoComplete="off"
-        />
-        <p className="text-xs text-gray-400 dark:text-gray-500 -mt-2">
-          Get your key at{' '}
-          <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">
-            console.anthropic.com
-          </a>
-          . Free tier available.
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <ProviderStatusCard
+            title="Local Ollama"
+            description="Runs code review models on your machine or your own server. No cloud LLM key required."
+            configured={ollamaEnabled}
+            available={liveAvailability?.ollama_available ?? null}
+            recommended
+            costNote="No API charge; you provide the local compute."
+          />
+          <ProviderStatusCard
+            title="Claude BYOK"
+            description="Use Anthropic with your own API key when you want hosted model quality."
+            configured={claudeConfigured}
+            available={liveAvailability?.claude_available ?? null}
+            costNote="Billed to your Anthropic account based on token usage."
+          />
+          <ProviderStatusCard
+            title="OpenAI BYOK"
+            description="Use OpenAI with your own API key as a hosted fallback provider."
+            configured={gptConfigured}
+            available={liveAvailability?.gpt_available ?? null}
+            costNote="Billed to your OpenAI account based on token usage."
+          />
+        </div>
+        <p className="rounded-lg bg-gray-50 dark:bg-gray-900 px-4 py-3 text-xs text-gray-600 dark:text-gray-400">
+          Your keys stay encrypted locally/server-side. Hosted Claude/OpenAI usage is billed to your own provider account; Ollama runs locally with no API spend.
         </p>
-        <ApiKeyInput
-          id="api-key-gpt"
-          label="OpenAI GPT"
-          value={apiKeyGpt}
-          onChange={setApiKeyGpt}
-          placeholder="sk-..."
-          isSet={settings?.api_key_gpt_set}
-          autoComplete="off"
-        />
-        <p className="text-xs text-gray-400 dark:text-gray-500 -mt-2">
-          Get your key at{' '}
-          <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">
-            platform.openai.com
-          </a>
-          . Used as fallback if Claude is unavailable.
-        </p>
-      </section>
-
-      {/* LLM Provider preference */}
-      <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-        <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-4">LLM Provider</h2>
-        <LLMSelector value={lmPreference} onChange={setLmPreference} />
       </section>
 
       {/* Ollama */}
       <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200">Local Ollama</h2>
+            <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200">Local Ollama (Free/Local Default)</h2>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Run models locally — no API costs. Requires Ollama to be publicly accessible.
+              Recommended first path for self-hosted demos. Run models locally with no cloud API costs.
             </p>
           </div>
           <button
@@ -395,6 +424,54 @@ export function Settings() {
             </div>
           </div>
         )}
+      </section>
+
+      {/* API Keys */}
+      <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 space-y-4">
+        <div>
+          <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200">BYOK API Keys</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            Optional hosted providers. Leave fields blank to keep existing keys.
+          </p>
+        </div>
+        <ApiKeyInput
+          id="api-key-claude"
+          label="Anthropic Claude"
+          value={apiKeyClaude}
+          onChange={setApiKeyClaude}
+          placeholder="sk-ant-..."
+          isSet={settings?.api_key_claude_set}
+          autoComplete="off"
+        />
+        <p className="text-xs text-gray-400 dark:text-gray-500 -mt-2">
+          Get your key at{' '}
+          <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">
+            console.anthropic.com
+          </a>
+          . BYOK usage may be billed by Anthropic based on model and token volume.
+        </p>
+        <ApiKeyInput
+          id="api-key-gpt"
+          label="OpenAI GPT"
+          value={apiKeyGpt}
+          onChange={setApiKeyGpt}
+          placeholder="sk-..."
+          isSet={settings?.api_key_gpt_set}
+          autoComplete="off"
+        />
+        <p className="text-xs text-gray-400 dark:text-gray-500 -mt-2">
+          Get your key at{' '}
+          <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">
+            platform.openai.com
+          </a>
+          . BYOK usage may be billed by OpenAI based on model and token volume.
+        </p>
+      </section>
+
+      {/* LLM Provider preference */}
+      <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-4">LLM Provider</h2>
+        <LLMSelector value={lmPreference} onChange={setLmPreference} />
       </section>
 
       {/* Default agents */}

@@ -14,22 +14,22 @@ const LLM_OPTIONS = [
   {
     value: 'auto',
     label: 'Auto',
-    description: 'Automatically select the best available provider'
-  },
-  {
-    value: 'claude',
-    label: 'Claude',
-    description: 'Anthropic Claude Opus — highest accuracy'
-  },
-  {
-    value: 'gpt',
-    label: 'GPT',
-    description: 'OpenAI GPT — reliable fallback'
+    description: 'Prefer configured providers automatically, including local Ollama'
   },
   {
     value: 'local',
     label: 'Local (Ollama)',
-    description: 'Qwen2.5-Coder-32B via Ollama — private, no cost'
+    description: 'Free local models via Ollama — recommended for self-hosted demos'
+  },
+  {
+    value: 'claude',
+    label: 'Claude BYOK',
+    description: 'Use your own Anthropic key for higher-accuracy hosted reviews'
+  },
+  {
+    value: 'gpt',
+    label: 'OpenAI BYOK',
+    description: 'Use your own OpenAI key as a hosted fallback provider'
   }
 ]
 
