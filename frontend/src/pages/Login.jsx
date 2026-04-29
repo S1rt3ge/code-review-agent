@@ -254,13 +254,25 @@ export function Login() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-md">
         {/* Brand header */}
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Code Review Agent</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             AI-powered PR reviews in seconds
           </p>
+        </div>
+
+        <div className="mb-4 rounded-xl border border-blue-100 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/40 px-4 py-3 text-sm text-blue-900 dark:text-blue-100">
+          <p className="font-semibold">Self-hosted demo ready</p>
+          <p className="mt-1 text-blue-800 dark:text-blue-200">
+            Run locally, seed sample reviews, and connect Ollama or your own cloud keys. No paid hosting required.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-blue-700 dark:text-blue-200">
+            <span className="rounded-full bg-white dark:bg-blue-900/60 px-2 py-1">Local Docker</span>
+            <span className="rounded-full bg-white dark:bg-blue-900/60 px-2 py-1">Ollama-friendly</span>
+            <span className="rounded-full bg-white dark:bg-blue-900/60 px-2 py-1">BYOK cloud</span>
+          </div>
         </div>
 
         {/* Card */}
