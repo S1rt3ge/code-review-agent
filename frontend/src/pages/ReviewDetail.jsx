@@ -43,6 +43,13 @@ import { StatusBadge } from '@/components/StatusBadge.jsx'
 
 const KNOWN_AGENTS = ['security', 'performance', 'style', 'logic']
 
+const AGENT_EXPLAINERS = {
+  security: 'Finds auth, injection, secret exposure, and unsafe trust-boundary patterns.',
+  performance: 'Looks for N+1 queries, expensive loops, memory pressure, and scaling risks.',
+  style: 'Flags readability, naming, consistency, and maintainability issues.',
+  logic: 'Checks boundary cases, null handling, type mismatches, and correctness bugs.',
+}
+
 /**
  * Format seconds into a human-readable duration string.
  * @param {number} seconds
@@ -78,6 +85,39 @@ function MetaRow({ label, children }) {
         {label}
       </span>
       <span className="text-sm text-gray-800 dark:text-gray-200 min-w-0 break-all">{children}</span>
+    </div>
+  )
+}
+
+/**
+ * Explains what the multi-agent review did for non-technical demo viewers.
+ * @param {{ agents: string[], lmUsed?: string|null }} props
+ * @returns {React.ReactElement}
+ */
+function AboutReviewPanel({ agents, lmUsed }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+        About This Review
+      </h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+        The code diff was analyzed by specialized agents, then duplicate findings were grouped and ranked by severity.
+      </p>
+      <div className="space-y-2">
+        {agents.map(agent => (
+          <div key={agent} className="rounded-lg bg-gray-50 dark:bg-gray-900 px-3 py-2">
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 capitalize">
+              {agent}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {AGENT_EXPLAINERS[agent] ?? 'Runs a focused review pass over the pull request diff.'}
+            </p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs text-gray-400 dark:text-gray-500">
+        Provider: {lmUsed || 'selected automatically from your configured LLM settings'}.
+      </p>
     </div>
   )
 }
@@ -286,8 +326,12 @@ export function ReviewDetail() {
 
       {/* Error state */}
       {review.status === 'error' && review.error_message && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
-          <span className="font-medium">Error: </span>{review.error_message}
+        <div className="rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400 space-y-1">
+          <p className="font-medium">Analysis did not complete</p>
+          <p>{review.error_message}</p>
+          <p className="text-xs text-red-600 dark:text-red-300">
+            Check repository webhook setup and LLM availability, then run the review again.
+          </p>
         </div>
       )}
 
@@ -324,6 +368,8 @@ export function ReviewDetail() {
               ))}
             </div>
           </div>
+
+          <AboutReviewPanel agents={selectedAgents} lmUsed={review.lm_used} />
         </div>
 
         {/* Right: findings table */}
