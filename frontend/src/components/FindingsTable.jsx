@@ -28,6 +28,12 @@ const SEVERITY_BADGE_CLASSES = {
   info:     'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
 }
 
+const SUMMARY_BUCKETS = [
+  { label: 'High Risk', severities: ['critical', 'high', 'warning'] },
+  { label: 'Medium Risk', severities: ['medium'] },
+  { label: 'Low / Info', severities: ['low', 'info'] },
+]
+
 /**
  * Truncate a file path to the last two path segments for compact display.
  * @param {string} filePath
@@ -55,6 +61,14 @@ export function FindingsTable({ findings, onSelectFinding }) {
     [findings]
   )
 
+  const summary = useMemo(
+    () => SUMMARY_BUCKETS.map(bucket => ({
+      label: bucket.label,
+      count: findings.filter(finding => bucket.severities.includes(finding.severity)).length,
+    })),
+    [findings]
+  )
+
   if (findings.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -75,93 +89,113 @@ export function FindingsTable({ findings, onSelectFinding }) {
         </svg>
         <p className="text-base font-medium text-gray-700 dark:text-gray-300">No findings</p>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          No issues detected. Great code!
+          No actionable issues were detected by the selected review agents.
         </p>
       </div>
     )
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-          <tr>
-            <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">
-              Severity
-            </th>
-            <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">
-              Agent
-            </th>
-            <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">
-              File
-            </th>
-            <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">
-              Line
-            </th>
-            <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">
-              Message
-            </th>
-            <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">
-              Suggestion
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-          {sorted.map(finding => (
-            <tr
-              key={finding.id}
-              onClick={() => onSelectFinding?.(finding)}
-              className={`transition-colors ${
-                onSelectFinding
-                  ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800'
-                  : ''
-              }`}
-            >
-              <td className="py-3 px-4 whitespace-nowrap">
-                <span
-                  className={`inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
-                    SEVERITY_BADGE_CLASSES[finding.severity] ?? ''
-                  }`}
-                >
-                  {finding.severity}
-                </span>
-              </td>
-              <td className="py-3 px-4 whitespace-nowrap">
-                <span className="text-xs font-mono text-gray-600 dark:text-gray-400">
-                  {finding.agentName}
-                </span>
-              </td>
-              <td className="py-3 px-4">
-                <span
-                  className="text-xs font-mono text-gray-600 dark:text-gray-400"
-                  title={finding.filePath}
-                >
-                  {truncatePath(finding.filePath)}
-                </span>
-              </td>
-              <td className="py-3 px-4 whitespace-nowrap">
-                <span className="text-xs font-mono text-gray-500 dark:text-gray-500">
-                  {finding.lineNumber}
-                </span>
-              </td>
-              <td className="py-3 px-4">
-                <span className="text-sm text-gray-800 dark:text-gray-200">
-                  {finding.message}
-                </span>
-              </td>
-              <td className="py-3 px-4">
-                {finding.suggestion ? (
-                  <span className="text-xs text-gray-500 dark:text-gray-400 italic">
-                    {finding.suggestion}
-                  </span>
-                ) : (
-                  <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
-                )}
-              </td>
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Findings are sorted by severity so the riskiest issues are reviewed first.
+          </p>
+          <div className="flex flex-wrap gap-2" aria-label="Findings severity summary">
+            {summary.map(item => (
+              <span
+                key={item.label}
+                className="inline-flex items-center gap-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs text-gray-600 dark:text-gray-300"
+              >
+                <span className="font-semibold">{item.count}</span>
+                {item.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+            <tr>
+              <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                Severity
+              </th>
+              <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                Agent
+              </th>
+              <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">
+                File
+              </th>
+              <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                Line
+              </th>
+              <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">
+                Message
+              </th>
+              <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">
+                Suggestion
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            {sorted.map(finding => (
+              <tr
+                key={finding.id}
+                onClick={() => onSelectFinding?.(finding)}
+                className={`transition-colors ${
+                  onSelectFinding
+                    ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800'
+                    : ''
+                }`}
+              >
+                <td className="py-3 px-4 whitespace-nowrap">
+                  <span
+                    className={`inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
+                      SEVERITY_BADGE_CLASSES[finding.severity] ?? ''
+                    }`}
+                  >
+                    {finding.severity}
+                  </span>
+                </td>
+                <td className="py-3 px-4 whitespace-nowrap">
+                  <span className="text-xs font-mono text-gray-600 dark:text-gray-400">
+                    {finding.agentName}
+                  </span>
+                </td>
+                <td className="py-3 px-4">
+                  <span
+                    className="text-xs font-mono text-gray-600 dark:text-gray-400"
+                    title={finding.filePath}
+                  >
+                    {truncatePath(finding.filePath)}
+                  </span>
+                </td>
+                <td className="py-3 px-4 whitespace-nowrap">
+                  <span className="text-xs font-mono text-gray-500 dark:text-gray-500">
+                    {finding.lineNumber}
+                  </span>
+                </td>
+                <td className="py-3 px-4">
+                  <span className="text-sm text-gray-800 dark:text-gray-200">
+                    {finding.message}
+                  </span>
+                </td>
+                <td className="py-3 px-4">
+                  {finding.suggestion ? (
+                    <span className="text-xs text-gray-500 dark:text-gray-400 italic">
+                      {finding.suggestion}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
