@@ -45,6 +45,17 @@ describe('Login page', () => {
     expect(screen.getByText('Forgot password?')).toBeInTheDocument()
   })
 
+  it('explains the self-hosted demo before authentication', () => {
+    renderLogin()
+    expect(screen.getByText('Self-hosted demo ready')).toBeInTheDocument()
+    expect(
+      screen.getByText('Run locally, seed sample reviews, and connect Ollama or your own cloud keys. No paid hosting required.')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Local Docker')).toBeInTheDocument()
+    expect(screen.getByText('Ollama-friendly')).toBeInTheDocument()
+    expect(screen.getByText('BYOK cloud')).toBeInTheDocument()
+  })
+
   it('switches to register form when "Create account" tab is clicked', () => {
     renderLogin()
     // First button with this name is the tab (tab comes before submit)
