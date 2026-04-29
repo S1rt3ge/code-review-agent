@@ -12,10 +12,10 @@ const STATUS_CLASSES = {
 
 /** @type {Record<string, string>} */
 const STATUS_LABELS = {
-  pending: 'Pending',
+  pending: 'Queued',
   analyzing: 'Analyzing',
-  done: 'Done',
-  error: 'Error'
+  done: 'Complete',
+  error: 'Failed'
 }
 
 /**
@@ -31,6 +31,7 @@ export function StatusBadge({ status, className = '' }) {
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${colorClass} ${className}`}
+      aria-label={`Review status: ${label}`}
     >
       {status === 'analyzing' && (
         <span
