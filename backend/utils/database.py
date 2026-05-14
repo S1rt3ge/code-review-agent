@@ -18,8 +18,11 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from backend.config import settings
+from backend.utils.event_loop import configure_windows_selector_event_loop_policy
 
 logger = logging.getLogger(__name__)
+
+configure_windows_selector_event_loop_policy()
 
 engine = create_async_engine(
     settings.database_url,

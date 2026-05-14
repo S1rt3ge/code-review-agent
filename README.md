@@ -21,6 +21,8 @@ This project was built as an end-to-end engineering exercise in backend architec
 - Async FastAPI backend with PostgreSQL, JWT auth, and WebSocket progress updates
 - React dashboard for review history, settings, and real-time execution state
 - Durable database-backed analysis queue with retry, stale-lock recovery, and health diagnostics
+- Local Review Playground for demo and pasted-diff reviews without GitHub or paid AI providers
+- Deterministic review quality evals for local regression checks
 - GitHub webhook / PR comment integration
 - Production hardening across auth, CI, release gating, dependency hygiene, and governance
 
@@ -34,6 +36,12 @@ At a high level, the application behaves like an automated AI reviewer that sits
 4. Code diffs are chunked and analyzed by multiple domain-specific agents in parallel.
 5. Findings are deduplicated, ranked, and stored.
 6. Results are exposed in the dashboard and can be posted back to the PR as a structured comment.
+
+For local evaluation, the dashboard also includes a Local Review Playground:
+
+1. Click `Try demo review` to create an instant deterministic review from a bundled diff.
+2. Click `Paste diff` to review a local git diff without creating a GitHub App.
+3. Open the generated review detail page to inspect findings, agent status, and zero-cost local execution.
 
 ## Architecture
 
@@ -102,6 +110,11 @@ The application supports a complete authenticated user flow:
 - email verification
 - password reset
 - verified-email enforcement for protected access
+
+For local development, email verification can be disabled with
+`AUTH_REQUIRE_EMAIL_VERIFICATION=false` so registration and login work without an
+SMTP provider. Non-dev environments require verification unless the flag is
+explicitly disabled.
 
 ### GitHub integration
 
@@ -257,7 +270,8 @@ This keeps CI/runtime deterministic while still allowing local development on Wi
 
 ```bash
 pip install -r requirements.txt -r requirements-dev-windows.in  # Windows local dev
-uvicorn backend.main:app --reload
+python scripts/migrate.py
+python -m backend.run
 ```
 
 ### Frontend
@@ -274,6 +288,21 @@ npm run dev
 docker compose up --build
 ```
 
+This starts PostgreSQL, the FastAPI backend, and the Vite frontend together.
+Open the app at `http://localhost:5173`; the frontend proxies `/api` and `/ws`
+to the backend container.
+
+Docker defaults to `AUTH_REQUIRE_EMAIL_VERIFICATION=false`, so local accounts can
+sign in immediately after registration. Set `AUTH_REQUIRE_EMAIL_VERIFICATION=true`
+to test the production-style verification flow.
+
+### 30-second local demo
+
+After Docker starts, open `http://localhost:5173`, create an account, and click
+`Try demo review` on the dashboard. This creates a completed review using the
+local playground analyzer, so no SMTP, GitHub App, OpenAI, Anthropic, or Ollama
+setup is required for the first product walkthrough.
+
 ## Testing
 
 ### Backend
@@ -282,6 +311,17 @@ docker compose up --build
 pytest -m "not integration" --tb=short -q
 pytest -m integration --tb=short -q
 ```
+
+### Review quality evals
+
+```bash
+python scripts/evaluate_review_quality.py
+python scripts/evaluate_review_quality.py --json
+```
+
+The eval runner grades the deterministic Local Review Playground analyzer against
+fixture cases in `evals/review_quality_cases.json`. It reports case pass rate,
+expected finding recall, unexpected findings, and an overall score.
 
 ### Frontend
 

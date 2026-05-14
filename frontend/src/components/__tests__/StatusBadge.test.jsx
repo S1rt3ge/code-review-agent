@@ -3,9 +3,9 @@ import { describe, it, expect } from 'vitest'
 import { StatusBadge } from '../StatusBadge.jsx'
 
 describe('StatusBadge', () => {
-  it('renders "Pending" label for pending status', () => {
+  it('renders "Queued" label for pending status', () => {
     render(<StatusBadge status="pending" />)
-    expect(screen.getByText('Pending')).toBeInTheDocument()
+    expect(screen.getByText('Queued')).toBeInTheDocument()
   })
 
   it('renders "Analyzing" label for analyzing status', () => {
@@ -13,14 +13,19 @@ describe('StatusBadge', () => {
     expect(screen.getByText('Analyzing')).toBeInTheDocument()
   })
 
-  it('renders "Done" label for done status', () => {
+  it('renders "Complete" label for done status', () => {
     render(<StatusBadge status="done" />)
-    expect(screen.getByText('Done')).toBeInTheDocument()
+    expect(screen.getByText('Complete')).toBeInTheDocument()
   })
 
-  it('renders "Error" label for error status', () => {
+  it('renders "Failed" label for error status', () => {
     render(<StatusBadge status="error" />)
-    expect(screen.getByText('Error')).toBeInTheDocument()
+    expect(screen.getByText('Failed')).toBeInTheDocument()
+  })
+
+  it('exposes the readable status to assistive tech', () => {
+    render(<StatusBadge status="done" />)
+    expect(screen.getByLabelText('Review status: Complete')).toBeInTheDocument()
   })
 
   it('renders spinner for analyzing status', () => {
