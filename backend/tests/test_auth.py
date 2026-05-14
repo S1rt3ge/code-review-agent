@@ -16,6 +16,7 @@ from fastapi import HTTPException
 from jose import jwt
 
 from backend.config import settings
+from backend.utils import auth_policy
 from backend.utils.auth import (
     create_access_token,
     get_current_user,
@@ -163,3 +164,23 @@ async def test_get_current_user_unverified_email_raises_403():
         await get_current_user(token=token, session=mock_session)
 
     assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_allows_unverified_email_when_verification_disabled(
+    monkeypatch,
+):
+    monkeypatch.setattr(auth_policy.settings, "auth_require_email_verification", False)
+    uid = uuid.uuid4()
+    token = create_access_token(uid, "local@example.com")
+
+    mock_user = MagicMock()
+    mock_user.id = uid
+    mock_user.email_verified = False
+
+    mock_session = AsyncMock()
+    mock_session.get = AsyncMock(return_value=mock_user)
+
+    user = await get_current_user(token=token, session=mock_session)
+
+    assert user is mock_user
