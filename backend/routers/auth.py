@@ -43,6 +43,7 @@ from backend.utils.auth import (
     hash_password,
     verify_password,
 )
+from backend.utils.auth_policy import is_email_verification_required
 from backend.utils.database import get_db
 from backend.utils.rate_limit import limiter
 from backend.utils.tokens import generate_urlsafe_token, hash_token
@@ -107,44 +108,59 @@ async def register(
         suffix += 1
 
     now = datetime.now(timezone.utc)
-    verification_token = generate_urlsafe_token()
+    verification_required = is_email_verification_required()
+    verification_token = generate_urlsafe_token() if verification_required else None
 
     user = User(
         id=uuid.uuid4(),
         email=email,
         username=username,
         hashed_password=hash_password(payload.password),
-        email_verified=False,
-        email_verification_token_hash=hash_token(verification_token),
+        email_verified=not verification_required,
+        email_verified_at=None if verification_required else now,
+        email_verification_token_hash=(
+            hash_token(verification_token) if verification_token else None
+        ),
         email_verification_expires_at=(
             now + timedelta(minutes=settings.email_verification_token_expire_minutes)
+            if verification_required
+            else None
         ),
-        email_verification_sent_at=now,
+        email_verification_sent_at=now if verification_required else None,
     )
     session.add(user)
     await session.flush()
 
-    verification_link = _frontend_link("/verify-email", verification_token)
-    subject, body = build_email_verification_email(verification_link)
-    try:
-        await send_email(user.email, subject, body)
-    except EmailDeliveryError as exc:
-        if settings.app_env.lower() not in {
-            "development",
-            "dev",
-            "local",
-            "test",
-            "testing",
-        }:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Unable to send verification email right now. Please try again later.",
-            ) from exc
-        logger.warning("Failed to send verification email to %s: %s", user.email, exc)
+    if verification_required and verification_token:
+        verification_link = _frontend_link("/verify-email", verification_token)
+        subject, body = build_email_verification_email(verification_link)
+        try:
+            await send_email(user.email, subject, body)
+        except EmailDeliveryError as exc:
+            if settings.app_env.lower() not in {
+                "development",
+                "dev",
+                "local",
+                "test",
+                "testing",
+            }:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Unable to send verification email right now. Please try again later.",
+                ) from exc
+            logger.warning("Failed to send verification email to %s: %s", user.email, exc)
+    else:
+        logger.info(
+            "Email verification disabled; auto-verified local user %s", user.email
+        )
 
     logger.info("Registered new user %s (%s)", user.username, user.email)
 
-    return MessageResponse(message="Account created. Please verify your email before signing in.")
+    if verification_required:
+        return MessageResponse(
+            message="Account created. Please verify your email before signing in."
+        )
+    return MessageResponse(message="Account created. You can sign in now.")
 
 
 @router.post("/token", response_model=TokenResponse)
@@ -185,7 +201,7 @@ async def login(
     if not verify_password(form_data.password, user.hashed_password):
         raise invalid_exc
 
-    if not user.email_verified:
+    if is_email_verification_required() and not user.email_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Email is not verified. Check your inbox or request a new verification link.",

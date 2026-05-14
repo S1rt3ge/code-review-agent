@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import { FindingsTable } from '../FindingsTable.jsx'
 
@@ -37,7 +37,24 @@ describe('FindingsTable', () => {
   it('renders empty state when there are no findings', () => {
     render(<FindingsTable findings={[]} />)
     expect(screen.getByText('No findings')).toBeInTheDocument()
-    expect(screen.getByText('No issues detected. Great code!')).toBeInTheDocument()
+    expect(
+      screen.getByText('No actionable issues were detected by the selected review agents.')
+    ).toBeInTheDocument()
+  })
+
+  it('renders a severity summary for non-empty findings', () => {
+    render(<FindingsTable findings={SAMPLE_FINDINGS} />)
+    expect(
+      screen.getByText('Findings are sorted by severity so the riskiest issues are reviewed first.')
+    ).toBeInTheDocument()
+
+    const summary = screen.getByLabelText('Findings severity summary')
+    expect(within(summary).getByText('High Risk')).toBeInTheDocument()
+    expect(within(summary).getByText('Medium Risk')).toBeInTheDocument()
+    expect(within(summary).getByText('Low / Info')).toBeInTheDocument()
+    expect(summary).toHaveTextContent('2High Risk')
+    expect(summary).toHaveTextContent('0Medium Risk')
+    expect(summary).toHaveTextContent('1Low / Info')
   })
 
   it('renders all column headers when findings exist', () => {
