@@ -44,7 +44,7 @@ def _send_email_sync(to_email: str, subject: str, body: str) -> None:
     if not _smtp_is_configured():
         if _email_fallback_allowed():
             if settings.app_env.lower() in _NON_PROD_ENVS:
-                logger.info(
+                logger.warning(
                     "[email-fallback] to=%s subject=%s\n%s", to_email, subject, body
                 )
             else:

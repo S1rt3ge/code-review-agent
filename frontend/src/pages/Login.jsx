@@ -167,8 +167,8 @@ function RegisterForm({ onRegistered }) {
     }
     setLoading(true)
     try {
-      await publicPost('/auth/register', { email, password })
-      setSuccess('Account created. Check your email for a verification link before signing in.')
+      const res = await publicPost('/auth/register', { email, password })
+      setSuccess(res?.message || 'Account created.')
       setPassword('')
       setConfirm('')
     } catch (err) {
@@ -213,9 +213,6 @@ function RegisterForm({ onRegistered }) {
       {success && (
         <p className="text-sm text-green-700 dark:text-green-400">{success}</p>
       )}
-      <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-900 rounded-md px-3 py-2">
-        After registration, check your email to verify your account.
-      </p>
       {success && (
         <button
           type="button"
