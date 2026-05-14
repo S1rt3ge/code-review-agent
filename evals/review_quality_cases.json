@@ -1,0 +1,86 @@
+{
+  "cases": [
+    {
+      "id": "security_secret_and_eval",
+      "title": "Detect hardcoded secret and unsafe eval",
+      "selected_agents": ["security"],
+      "code_diff": "diff --git a/app/auth.py b/app/auth.py\n--- a/app/auth.py\n+++ b/app/auth.py\n@@ -1,2 +1,4 @@\n+API_KEY = \"sk-local-eval-secret\"\n+result = eval(user_input)\n",
+      "expected_findings": [
+        {
+          "agent_name": "security",
+          "finding_type": "hardcoded_secret",
+          "file_path": "app/auth.py",
+          "severity": "high"
+        },
+        {
+          "agent_name": "security",
+          "finding_type": "unsafe_eval",
+          "file_path": "app/auth.py",
+          "severity": "critical"
+        }
+      ],
+      "max_unexpected_findings": 0
+    },
+    {
+      "id": "performance_await_in_loop",
+      "title": "Detect await inside a loop",
+      "selected_agents": ["performance"],
+      "code_diff": "diff --git a/app/jobs.py b/app/jobs.py\n--- a/app/jobs.py\n+++ b/app/jobs.py\n@@ -1,2 +1,4 @@\n+for item in items:\n+    await db.write(item)\n",
+      "expected_findings": [
+        {
+          "agent_name": "performance",
+          "finding_type": "await_in_loop",
+          "file_path": "app/jobs.py",
+          "severity": "medium"
+        }
+      ],
+      "max_unexpected_findings": 0
+    },
+    {
+      "id": "logic_swallowed_error",
+      "title": "Detect swallowed broad error handler",
+      "selected_agents": ["logic"],
+      "code_diff": "diff --git a/app/config.py b/app/config.py\n--- a/app/config.py\n+++ b/app/config.py\n@@ -1,2 +1,5 @@\n+try:\n+    return load_config(path)\n+except:\n+    return {}\n",
+      "expected_findings": [
+        {
+          "agent_name": "logic",
+          "finding_type": "swallowed_error",
+          "file_path": "app/config.py",
+          "severity": "medium"
+        }
+      ],
+      "max_unexpected_findings": 0
+    },
+    {
+      "id": "style_long_line",
+      "title": "Detect unreadably long added line",
+      "selected_agents": ["style"],
+      "code_diff": "diff --git a/app/report.py b/app/report.py\n--- a/app/report.py\n+++ b/app/report.py\n@@ -1,2 +1,3 @@\n+return \"Report: \" + payload[\"title\"] + \" \" + payload[\"description\"] + \" \" + payload[\"notes\"] + \" \" + payload[\"owner\"] + \" \" + payload[\"status\"]\n",
+      "expected_findings": [
+        {
+          "agent_name": "style",
+          "finding_type": "long_line",
+          "file_path": "app/report.py",
+          "severity": "low"
+        }
+      ],
+      "max_unexpected_findings": 0
+    },
+    {
+      "id": "clean_diff_no_findings",
+      "title": "Avoid false positives on a small clean diff",
+      "selected_agents": ["security", "performance", "style", "logic"],
+      "code_diff": "diff --git a/app/math.py b/app/math.py\n--- a/app/math.py\n+++ b/app/math.py\n@@ -1,2 +1,5 @@\n+def add(left, right):\n+    total = left + right\n+    return total\n",
+      "expected_findings": [],
+      "max_unexpected_findings": 0
+    },
+    {
+      "id": "selected_agent_scope",
+      "title": "Respect selected agents when a disabled agent would flag code",
+      "selected_agents": ["security"],
+      "code_diff": "diff --git a/app/jobs.py b/app/jobs.py\n--- a/app/jobs.py\n+++ b/app/jobs.py\n@@ -1,2 +1,4 @@\n+for item in items:\n+    await db.write(item)\n",
+      "expected_findings": [],
+      "max_unexpected_findings": 0
+    }
+  ]
+}
