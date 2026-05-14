@@ -254,19 +254,22 @@ const ALL_AGENTS = ['security', 'performance', 'style', 'logic']
 
 /**
  * Modal dialog to create and immediately trigger a new review.
- * @param {{ onClose: function(): void }} props
+ * @param {{ onClose: function(): void, initialMode?: 'pr'|'diff' }} props
  * @returns {React.ReactElement}
  */
-function NewReviewModal({ onClose }) {
+function NewReviewModal({ onClose, initialMode = 'pr' }) {
   const navigate = useNavigate()
   const { get, post } = useApi()
   const dialogRef = useRef(null)
 
+  const [mode, setMode] = useState(initialMode)
   /** @type {[Repository[], function]} */
   const [repos, setRepos] = useState([])
   const [reposLoading, setReposLoading] = useState(true)
   const [repoId, setRepoId] = useState('')
   const [prNum, setPrNum] = useState('')
+  const [diffTitle, setDiffTitle] = useState('')
+  const [codeDiff, setCodeDiff] = useState('')
   const [agents, setAgents] = useState(ALL_AGENTS)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
@@ -284,7 +287,7 @@ function NewReviewModal({ onClose }) {
   }, [get])
 
   useEffect(() => {
-    const firstInput = dialogRef.current?.querySelector('select, input, button')
+    const firstInput = dialogRef.current?.querySelector('select, input, textarea, button')
     firstInput?.focus()
 
     const onKeyDown = event => {
@@ -301,7 +304,7 @@ function NewReviewModal({ onClose }) {
   function handleDialogKeyDown(event) {
     if (event.key !== 'Tab') return
     const focusable = Array.from(
-      dialogRef.current?.querySelectorAll('button, input, select, a[href]') ?? []
+      dialogRef.current?.querySelectorAll('button, input, select, textarea, a[href]') ?? []
     ).filter(el => !el.disabled)
     if (focusable.length === 0) return
     const first = focusable[0]
@@ -326,16 +329,29 @@ function NewReviewModal({ onClose }) {
   }
 
   async function handleSubmit() {
-    if (!repoId || !prNum || agents.length === 0) return
+    if (agents.length === 0) return
+    if (mode === 'pr' && (!repoId || !prNum)) return
+    if (mode === 'diff' && !codeDiff.trim()) {
+      setError('Paste a git diff before starting the review')
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
-      const review = await post('/reviews', {
-        repo_id: repoId,
-        github_pr_number: Number(prNum),
-        selected_agents: agents,
-      })
-      await post(`/reviews/${review.id}/analyze`, {})
+      const review = mode === 'diff'
+        ? await post('/reviews/playground/diff', {
+            title: diffTitle.trim() || 'Pasted diff review',
+            code_diff: codeDiff,
+            selected_agents: agents,
+          })
+        : await post('/reviews', {
+            repo_id: repoId,
+            github_pr_number: Number(prNum),
+            selected_agents: agents,
+          })
+      if (mode === 'pr') {
+        await post(`/reviews/${review.id}/analyze`, {})
+      }
       navigate(`/reviews/${review.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create review')
@@ -372,58 +388,124 @@ function NewReviewModal({ onClose }) {
         </div>
 
         <div className="px-6 py-5 space-y-4">
-          {/* Repository selector */}
-          <div>
-            <label
-              htmlFor="repo-select"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          <div className="grid grid-cols-2 gap-2 rounded-lg bg-gray-100 dark:bg-gray-900 p-1">
+            <button
+              type="button"
+              onClick={() => setMode('pr')}
+              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                mode === 'pr'
+                  ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
             >
-              Repository
-            </label>
-            {reposLoading ? (
-              <div className="h-9 bg-gray-100 dark:bg-gray-700 rounded animate-pulse" />
-            ) : repos.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                No repositories configured.{' '}
-                <Link to="/repositories" className="text-blue-600 dark:text-blue-400 hover:underline" onClick={onClose}>
-                  Add one first.
-                </Link>
-              </p>
-            ) : (
-              <select
-                id="repo-select"
-                value={repoId}
-                onChange={e => setRepoId(e.target.value)}
-                className="w-full text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {repos.map(r => (
-                  <option key={r.id} value={r.id}>
-                    {r.github_repo_owner}/{r.github_repo_name}
-                  </option>
-                ))}
-              </select>
-            )}
+              Repository PR
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('diff')}
+              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                mode === 'diff'
+                  ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
+            >
+              Paste diff review
+            </button>
           </div>
 
-          {/* PR number */}
-          <div>
-            <label
-              htmlFor="pr-number"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-            >
-              PR Number
-            </label>
-            <input
-              id="pr-number"
-              type="number"
-              min="1"
-              required
-              value={prNum}
-              onChange={e => setPrNum(e.target.value)}
-              placeholder="e.g. 42"
-              className="w-full text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          {mode === 'pr' ? (
+            <>
+              {/* Repository selector */}
+              <div>
+                <label
+                  htmlFor="repo-select"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                >
+                  Repository
+                </label>
+                {reposLoading ? (
+                  <div className="h-9 bg-gray-100 dark:bg-gray-700 rounded animate-pulse" />
+                ) : repos.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    No repositories configured.{' '}
+                    <Link to="/repositories" className="text-blue-600 dark:text-blue-400 hover:underline" onClick={onClose}>
+                      Add one first.
+                    </Link>
+                  </p>
+                ) : (
+                  <select
+                    id="repo-select"
+                    value={repoId}
+                    onChange={e => setRepoId(e.target.value)}
+                    className="w-full text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {repos.map(r => (
+                      <option key={r.id} value={r.id}>
+                        {r.github_repo_owner}/{r.github_repo_name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* PR number */}
+              <div>
+                <label
+                  htmlFor="pr-number"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                >
+                  PR Number
+                </label>
+                <input
+                  id="pr-number"
+                  type="number"
+                  min="1"
+                  required
+                  value={prNum}
+                  onChange={e => setPrNum(e.target.value)}
+                  placeholder="e.g. 42"
+                  className="w-full text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label
+                  htmlFor="diff-title"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                >
+                  Title
+                </label>
+                <input
+                  id="diff-title"
+                  type="text"
+                  maxLength={160}
+                  value={diffTitle}
+                  onChange={e => setDiffTitle(e.target.value)}
+                  placeholder="Optional review title"
+                  className="w-full text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="code-diff"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                >
+                  Git diff
+                </label>
+                <textarea
+                  id="code-diff"
+                  value={codeDiff}
+                  onChange={e => setCodeDiff(e.target.value)}
+                  placeholder="diff --git a/file.py b/file.py"
+                  rows={8}
+                  className="w-full text-sm font-mono rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                />
+              </div>
+            </>
+          )}
 
           {/* Agents */}
           <div>
@@ -464,7 +546,12 @@ function NewReviewModal({ onClose }) {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={submitting || !repoId || !prNum || agents.length === 0}
+            disabled={
+              submitting ||
+              agents.length === 0 ||
+              (mode === 'pr' && (!repoId || !prNum)) ||
+              (mode === 'diff' && !codeDiff.trim())
+            }
             className="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors disabled:opacity-50"
           >
             {submitting ? 'Starting...' : 'Start Review'}
@@ -503,6 +590,7 @@ function formatRelativeTime(isoDate) {
  * @returns {React.ReactElement}
  */
 export function Dashboard() {
+  const navigate = useNavigate()
   /** @type {[DashboardStats|null, function]} */
   const [stats, setStats] = useState(null)
   /** @type {[ReviewSummary[], function]} */
@@ -513,8 +601,11 @@ export function Dashboard() {
   const [reviewsError, setReviewsError] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [modalMode, setModalMode] = useState(/** @type {'pr'|'diff'} */ ('pr'))
+  const [playgroundLoading, setPlaygroundLoading] = useState(false)
+  const [playgroundError, setPlaygroundError] = useState(null)
 
-  const { get } = useApi()
+  const { get, post } = useApi()
 
   const fetchStats = useCallback(async () => {
     setStatsLoading(true)
@@ -557,6 +648,26 @@ export function Dashboard() {
     fetchReviews(value)
   }
 
+  function openReviewModal(mode = 'pr') {
+    setModalMode(mode)
+    setShowModal(true)
+  }
+
+  async function handleDemoReview() {
+    setPlaygroundLoading(true)
+    setPlaygroundError(null)
+    try {
+      const review = await post('/reviews/playground/demo', {
+        selected_agents: ALL_AGENTS,
+      })
+      navigate(`/reviews/${review.id}`)
+    } catch (err) {
+      setPlaygroundError(err instanceof Error ? err.message : 'Failed to start demo review')
+    } finally {
+      setPlaygroundLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -568,7 +679,7 @@ export function Dashboard() {
           </p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={() => openReviewModal('pr')}
           className="shrink-0 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
         >
           New Review
@@ -614,15 +725,36 @@ export function Dashboard() {
       ) : reviews.length === 0 && statusFilter === '' ? (
         /* Empty state — only shown when not filtering */
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div className="px-6 pt-8 pb-4 text-center border-b border-gray-100 dark:border-gray-700">
+          <div className="px-6 pt-8 pb-6 text-center border-b border-gray-100 dark:border-gray-700">
             <svg className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" viewBox="0 0 48 48" fill="none" aria-hidden="true">
               <rect x="8" y="8" width="32" height="32" rx="4" stroke="currentColor" strokeWidth="2" />
               <path d="M16 20h16M16 28h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
             <p className="text-base font-semibold text-gray-800 dark:text-gray-200">No reviews yet</p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Follow the steps below to get your first automated code review.
+              Start with a local review now, then connect GitHub when you are ready.
             </p>
+            <div className="mt-5 flex flex-col sm:flex-row justify-center gap-3">
+              <button
+                type="button"
+                onClick={handleDemoReview}
+                disabled={playgroundLoading}
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {playgroundLoading ? 'Creating demo...' : 'Try demo review'}
+              </button>
+              <button
+                type="button"
+                onClick={() => openReviewModal('diff')}
+                disabled={playgroundLoading}
+                className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                Paste diff
+              </button>
+            </div>
+            {playgroundError && (
+              <p className="mt-3 text-sm text-red-600 dark:text-red-400">{playgroundError}</p>
+            )}
           </div>
 
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -744,7 +876,12 @@ export function Dashboard() {
       )}
 
       {/* New Review modal */}
-      {showModal && <NewReviewModal onClose={() => setShowModal(false)} />}
+      {showModal && (
+        <NewReviewModal
+          initialMode={modalMode}
+          onClose={() => setShowModal(false)}
+        />
+      )}
     </div>
   )
 }
