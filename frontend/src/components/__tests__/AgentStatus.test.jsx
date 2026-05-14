@@ -13,19 +13,24 @@ describe('AgentStatus', () => {
     expect(container.querySelector('.animate-spin')).not.toBeInTheDocument()
   })
 
-  it('renders "done" status label', () => {
+  it('renders friendly done status label', () => {
     render(<AgentStatus agentName="security" status="done" />)
-    expect(screen.getByText('done')).toBeInTheDocument()
+    expect(screen.getByText('Complete')).toBeInTheDocument()
   })
 
-  it('renders "error" status label', () => {
+  it('renders friendly error status label', () => {
     render(<AgentStatus agentName="security" status="error" />)
-    expect(screen.getByText('error')).toBeInTheDocument()
+    expect(screen.getByText('Failed')).toBeInTheDocument()
   })
 
-  it('renders "pending" status label', () => {
+  it('renders friendly pending status label', () => {
     render(<AgentStatus agentName="logic" status="pending" />)
-    expect(screen.getByText('pending')).toBeInTheDocument()
+    expect(screen.getByText('Queued')).toBeInTheDocument()
+  })
+
+  it('exposes the agent and status to assistive tech', () => {
+    render(<AgentStatus agentName="security" status="running" />)
+    expect(screen.getByLabelText('Security agent status: Running')).toBeInTheDocument()
   })
 
   it('maps known agent names to display labels', () => {
