@@ -34,6 +34,7 @@ import { StatusBadge } from '@/components/StatusBadge.jsx'
  * @property {number} tokens_input
  * @property {number} tokens_output
  * @property {string} estimated_cost
+ * @property {string|null} lm_used
  * @property {boolean} pr_comment_posted
  * @property {string} created_at
  * @property {string|null} completed_at
@@ -202,7 +203,12 @@ export function ReviewDetail() {
   if (!review) return null
 
   const canAnalyze = review.status === 'pending' || review.status === 'error'
-  const canComment = review.status === 'done' && findings.length > 0 && !review.pr_comment_posted
+  const isLocalPlayground = review.lm_used === 'local-playground'
+  const canComment =
+    review.status === 'done' &&
+    findings.length > 0 &&
+    !review.pr_comment_posted &&
+    !isLocalPlayground
   const durationSec =
     review.completed_at && review.created_at
       ? (new Date(review.completed_at) - new Date(review.created_at)) / 1000
@@ -301,6 +307,7 @@ export function ReviewDetail() {
             <MetaRow label="Findings">{review.total_findings}</MetaRow>
             <MetaRow label="Tokens in">{review.tokens_input.toLocaleString()}</MetaRow>
             <MetaRow label="Tokens out">{review.tokens_output.toLocaleString()}</MetaRow>
+            <MetaRow label="Model">{review.lm_used ?? '—'}</MetaRow>
             <MetaRow label="Cost">${Number(review.estimated_cost).toFixed(4)}</MetaRow>
             {durationSec !== null && (
               <MetaRow label="Duration">{formatDuration(durationSec)}</MetaRow>
