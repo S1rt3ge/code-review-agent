@@ -27,11 +27,11 @@ function formatDate(isoDate) {
 }
 
 /**
- * Copyable code block for the webhook URL.
- * @param {{ value: string }} props
+ * Copyable inline code block.
+ * @param {{ value: string, label?: string }} props
  * @returns {React.ReactElement}
  */
-function CopyableCode({ value }) {
+function CopyableCode({ value, label }) {
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState(null)
 
@@ -57,6 +57,7 @@ function CopyableCode({ value }) {
       <button
         type="button"
         onClick={handleCopy}
+        aria-label={`Copy ${label ?? value}`}
         className="text-xs text-blue-600 dark:text-blue-400 hover:underline shrink-0"
       >
         {copied ? 'Copied!' : 'Copy'}
@@ -72,27 +73,70 @@ function CopyableCode({ value }) {
  */
 function WebhookInfoPanel() {
   const webhookUrl = absoluteApiUrl('/github/webhook')
+  const secretEnvVar = 'GITHUB_WEBHOOK_SECRET'
 
   return (
-    <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-5 space-y-3">
-      <h2 className="text-sm font-semibold text-blue-800 dark:text-blue-300">
-        GitHub Webhook Setup
-      </h2>
-      <ul className="space-y-2 text-sm text-blue-700 dark:text-blue-300">
-        <li>
-          <span className="font-medium">Webhook URL:</span>{' '}
-          <CopyableCode value={webhookUrl} />
-        </li>
-        <li>
-          <span className="font-medium">Webhook secret:</span>{' '}
-          Use the <code className="text-xs bg-blue-100 dark:bg-blue-900 px-1.5 py-0.5 rounded font-mono">GITHUB_WEBHOOK_SECRET</code> value from your backend environment variables.
-        </li>
-        <li>
-          Add this webhook in your GitHub repo under{' '}
-          <strong className="text-blue-800 dark:text-blue-200">Settings &rarr; Webhooks</strong>.
-          Select <em>Pull requests</em> events.
-        </li>
-      </ul>
+    <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-5 space-y-5">
+      <div>
+        <h2 className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+          GitHub Webhook Setup
+        </h2>
+        <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
+          Use this for local testing with a free tunnel. No paid domain or hosting is required.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="rounded-lg bg-white/70 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 p-4 space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300">
+            GitHub values
+          </h3>
+          <ul className="space-y-2 text-sm text-blue-700 dark:text-blue-300">
+            <li>
+              <span className="font-medium">Payload URL:</span>{' '}
+              <CopyableCode value={webhookUrl} label="webhook URL" />
+            </li>
+            <li>
+              <span className="font-medium">Content type:</span>{' '}
+              <CopyableCode value="application/json" label="webhook content type" />
+            </li>
+            <li>
+              <span className="font-medium">Secret env var:</span>{' '}
+              <CopyableCode value={secretEnvVar} label="webhook secret env var name" />
+            </li>
+            <li>
+              <span className="font-medium">Events:</span> Pull request events only.
+            </li>
+          </ul>
+        </div>
+
+        <div className="rounded-lg bg-white/70 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 p-4 space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300">
+            Local tunnel options
+          </h3>
+          <div className="space-y-2 text-sm text-blue-700 dark:text-blue-300">
+            <p>
+              <span className="font-medium">Cloudflare Tunnel:</span>{' '}
+              <CopyableCode value="cloudflared tunnel --url http://localhost:8000" label="Cloudflare tunnel command" />
+            </p>
+            <p>
+              <span className="font-medium">ngrok:</span>{' '}
+              <CopyableCode value="ngrok http 8000" label="ngrok command" />
+            </p>
+            <p className="text-xs text-blue-600 dark:text-blue-400">
+              Replace the local origin in the payload URL with your tunnel URL, keeping <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">/api/github/webhook</code> at the end.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 p-4 text-sm text-amber-800 dark:text-amber-300 space-y-2">
+        <p className="font-semibold">Signature troubleshooting</p>
+        <p>
+          GitHub signs deliveries with <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">X-Hub-Signature-256</code>.
+          A wrong or missing <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">{secretEnvVar}</code> value returns 401 Invalid webhook signature.
+        </p>
+      </div>
     </div>
   )
 }
