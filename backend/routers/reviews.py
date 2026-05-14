@@ -26,13 +26,16 @@ from backend.models.schemas import (
     CreateReviewRequest,
     PostCommentRequest,
     PostCommentResponse,
+    PlaygroundDemoReviewRequest,
+    PlaygroundDiffReviewRequest,
     ReviewListItem,
     ReviewListResponse,
     ReviewResponse,
 )
 from backend.services.analysis_queue import enqueue_analysis
-from backend.services.pr_commenter import build_comment
 from backend.services.github_api import get_github_client
+from backend.services.playground_review import DEMO_DIFF, create_playground_review
+from backend.services.pr_commenter import build_comment
 from backend.utils.auth import create_review_ws_ticket, get_current_user
 from backend.utils.database import get_db
 
@@ -182,6 +185,64 @@ async def create_review(
         f"Manually created review {review.id} for PR #{payload.github_pr_number}"
     )
 
+    return ReviewResponse.model_validate(review)
+
+
+@router.post(
+    "/playground/demo",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ReviewResponse,
+)
+async def create_playground_demo_review(
+    payload: PlaygroundDemoReviewRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewResponse:
+    """Create a completed local demo review without GitHub or LLM setup."""
+    selected_agents = _validate_agents(payload.selected_agents)
+    review = await create_playground_review(
+        session,
+        current_user,
+        title="Local demo review",
+        code_diff=DEMO_DIFF,
+        selected_agents=selected_agents,
+    )
+    logger.info("Created local playground demo review %s", review.id)
+    return ReviewResponse.model_validate(review)
+
+
+@router.post(
+    "/playground/diff",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ReviewResponse,
+)
+async def create_playground_diff_review(
+    payload: PlaygroundDiffReviewRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewResponse:
+    """Create a completed local review from a pasted diff."""
+    selected_agents = _validate_agents(payload.selected_agents)
+    try:
+        review = await create_playground_review(
+            session,
+            current_user,
+            title=payload.title or "Pasted diff review",
+            code_diff=payload.code_diff,
+            selected_agents=selected_agents,
+        )
+    except OverflowError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    logger.info("Created local playground diff review %s", review.id)
     return ReviewResponse.model_validate(review)
 
 

@@ -22,8 +22,9 @@ from sqlalchemy import insert, select
 
 from backend.main import app
 from backend.models.db_models import Repository, Review, User
-from backend.utils.tokens import hash_token
+from backend.utils import auth_policy
 from backend.utils.database import async_session_factory
+from backend.utils.tokens import hash_token
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +301,106 @@ async def test_email_verification_confirm_allows_login(client):
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert allowed.status_code == 200
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_email_verification_can_be_disabled_for_local_login(client, monkeypatch):
+    monkeypatch.setattr(auth_policy.settings, "auth_require_email_verification", False)
+    email = _unique_email()
+    password = "LocalPass123!"
+
+    reg = await client.post(
+        "/api/auth/register",
+        json={
+            "email": email,
+            "username": f"local_{uuid.uuid4().hex[:6]}",
+            "password": password,
+        },
+    )
+    assert reg.status_code == 201
+    assert "sign in now" in reg.json()["message"].lower()
+
+    async with async_session_factory() as session:
+        result = await session.execute(select(User).where(User.email == email))
+        user = result.scalar_one()
+        assert user.email_verified is True
+        assert user.email_verification_token_hash is None
+
+    allowed = await client.post(
+        "/api/auth/token",
+        data={"username": email, "password": password},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert allowed.status_code == 200
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_playground_demo_review_creates_done_review(client, auth_headers):
+    response = await client.post(
+        "/api/reviews/playground/demo",
+        json={"selected_agents": ["security", "performance", "style", "logic"]},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201, response.text
+    review = response.json()
+    assert review["status"] == "done"
+    assert review["github_pr_title"] == "Local demo review"
+    assert review["lm_used"] == "local-playground"
+    assert review["total_findings"] >= 3
+    assert {finding["agent_name"] for finding in review["findings"]} >= {
+        "security",
+        "performance",
+        "logic",
+    }
+    assert {execution["status"] for execution in review["agent_executions"]} == {"done"}
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_playground_diff_review_finds_hardcoded_secret(client, auth_headers):
+    diff = """diff --git a/app.py b/app.py
+--- a/app.py
++++ b/app.py
+@@ -1,3 +1,5 @@
++API_KEY = "sk-local-test"
++result = eval(user_input)
+ print("done")
+"""
+
+    response = await client.post(
+        "/api/reviews/playground/diff",
+        json={
+            "title": "Paste diff smoke test",
+            "code_diff": diff,
+            "selected_agents": ["security"],
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201, response.text
+    review = response.json()
+    assert review["status"] == "done"
+    assert review["github_pr_title"] == "Paste diff smoke test"
+    assert review["total_findings"] >= 2
+    messages = [finding["message"].lower() for finding in review["findings"]]
+    assert any("secret" in message for message in messages)
+    assert any("eval" in message for message in messages)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_playground_diff_review_rejects_empty_diff(client, auth_headers):
+    response = await client.post(
+        "/api/reviews/playground/diff",
+        json={"code_diff": "   ", "selected_agents": ["security"]},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400
+    assert "diff" in response.json()["detail"].lower()
 
 
 @pytest.mark.integration
