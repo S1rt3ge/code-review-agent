@@ -148,6 +148,10 @@ class Settings(BaseSettings):
         default="5/minute",
         alias="AUTH_EMAIL_VERIFY_RATE_LIMIT",
     )
+    auth_require_email_verification: bool | None = Field(
+        default=None,
+        alias="AUTH_REQUIRE_EMAIL_VERIFICATION",
+    )
 
     # Auth token expiration windows
     password_reset_token_expire_minutes: int = Field(

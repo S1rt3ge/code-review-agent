@@ -384,6 +384,24 @@ class CreateReviewRequest(BaseModel):
     context: str | None = None
 
 
+class PlaygroundDemoReviewRequest(BaseModel):
+    """Request body for creating a bundled local demo review."""
+
+    selected_agents: list[str] = Field(
+        default_factory=lambda: ["security", "performance", "style", "logic"],
+    )
+
+
+class PlaygroundDiffReviewRequest(BaseModel):
+    """Request body for creating a local review from a pasted diff."""
+
+    title: str | None = Field(default=None, max_length=160)
+    code_diff: str
+    selected_agents: list[str] = Field(
+        default_factory=lambda: ["security", "performance", "style", "logic"],
+    )
+
+
 # ---------------------------------------------------------------------------
 # PR comment
 # ---------------------------------------------------------------------------

@@ -55,8 +55,11 @@ Thumbs.db
 # Dev docs (keep locally, not in repo)
 *.md
 !README.md
+!CLAUDE.md
+!AGENTS.md
 !CHANGELOG.md
 !SECURITY.md
+!SPEC_TEMPLATE.md
 !.github/*.md
 !docs/
 !docs/*.md
