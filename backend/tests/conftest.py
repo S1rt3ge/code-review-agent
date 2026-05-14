@@ -4,12 +4,13 @@ Forces asyncio SelectorEventLoop on Windows so psycopg async works correctly.
 On Linux/macOS the default event loop is already selector-based.
 """
 
-import asyncio
 import os
-import sys
+
+from backend.utils.event_loop import configure_windows_selector_event_loop_policy
 
 
 os.environ.setdefault("APP_ENV", "test")
+os.environ["AUTH_REQUIRE_EMAIL_VERIFICATION"] = "true"
 
 
 def pytest_configure(config):
@@ -18,5 +19,4 @@ def pytest_configure(config):
     psycopg's async driver is incompatible with Windows' default ProactorEventLoop.
     Switching to WindowsSelectorEventLoopPolicy fixes all async DB integration tests.
     """
-    if sys.platform == "win32":
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    configure_windows_selector_event_loop_policy()

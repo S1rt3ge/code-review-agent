@@ -129,6 +129,73 @@ describe('Dashboard page', () => {
 
     await waitFor(() => {
       expect(screen.getByText('No reviews yet')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Try demo review' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Paste diff' })).toBeInTheDocument()
+    })
+  })
+
+  it('starts a local demo review from the empty state', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ reviews: [], total: 0 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: 'demo-review-1',
+        status: 'done',
+      }), { status: 201 }))
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Try demo review' })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try demo review' }))
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/reviews/playground/demo',
+        expect.objectContaining({ method: 'POST' })
+      )
+    })
+  })
+
+  it('creates a local review from pasted diff without repositories', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ reviews: [], total: 0 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ repositories: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: 'paste-review-1',
+        status: 'done',
+      }), { status: 201 }))
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Paste diff' })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Paste diff' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Paste diff review' })).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'Local paste review' },
+    })
+    fireEvent.change(screen.getByLabelText('Git diff'), {
+      target: {
+        value: 'diff --git a/app.py b/app.py\n+++ b/app.py\n@@ -1 +1,2 @@\n+API_KEY = "sk-test"',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Start Review' }))
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/reviews/playground/diff',
+        expect.objectContaining({ method: 'POST' })
+      )
     })
   })
 
