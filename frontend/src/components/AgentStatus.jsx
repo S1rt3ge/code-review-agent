@@ -2,12 +2,20 @@
  * @typedef {'pending'|'running'|'done'|'error'} AgentStatusValue
  */
 
-/** @type {Record<AgentStatusValue, string>} */
+/** @type {Record<string, string>} */
 const AGENT_LABEL_MAP = {
   security: 'Security',
   performance: 'Performance',
   style: 'Style',
   logic: 'Logic'
+}
+
+/** @type {Record<AgentStatusValue, string>} */
+const STATUS_LABEL_MAP = {
+  pending: 'Queued',
+  running: 'Running',
+  done: 'Complete',
+  error: 'Failed'
 }
 
 /**
@@ -20,9 +28,13 @@ const AGENT_LABEL_MAP = {
  */
 export function AgentStatus({ agentName, status }) {
   const displayName = AGENT_LABEL_MAP[agentName] ?? agentName
+  const statusLabel = STATUS_LABEL_MAP[status] ?? status
 
   return (
-    <div className="flex items-center gap-2 py-1.5">
+    <div
+      className="flex items-center gap-2 py-1.5"
+      aria-label={`${displayName} agent status: ${statusLabel}`}
+    >
       {/* Status icon */}
       <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center" aria-hidden="true">
         {status === 'running' && (
@@ -73,7 +85,7 @@ export function AgentStatus({ agentName, status }) {
 
       {/* Status label */}
       <span className="ml-auto text-xs text-gray-400 dark:text-gray-500 capitalize">
-        {status}
+        {statusLabel}
       </span>
     </div>
   )
