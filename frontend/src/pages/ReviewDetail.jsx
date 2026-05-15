@@ -51,6 +51,18 @@ const AGENT_EXPLAINERS = {
   logic: 'Checks boundary cases, null handling, type mismatches, and correctness bugs.',
 }
 
+const PASSPORT_VERDICT_CLASSES = {
+  READY: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+  READY_WITH_RISKS: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+  BLOCKED: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
+}
+
+const PASSPORT_VERDICT_LABELS = {
+  READY: 'Ready',
+  READY_WITH_RISKS: 'Ready with risks',
+  BLOCKED: 'Blocked',
+}
+
 /**
  * Format seconds into a human-readable duration string.
  * @param {number} seconds
@@ -124,6 +136,256 @@ function AboutReviewPanel({ agents, lmUsed }) {
 }
 
 /**
+ * Evidence-backed merge readiness panel.
+ * @param {{
+ *   passport: any,
+ *   onGenerate: (payload: any) => Promise<void>,
+ *   onDelete: () => Promise<void>
+ * }} props
+ * @returns {React.ReactElement}
+ */
+function ReviewPassportPanel({ passport, onGenerate, onDelete }) {
+  const [mode, setMode] = useState('combined')
+  const [specRef, setSpecRef] = useState('')
+  const [specInput, setSpecInput] = useState('')
+  const [codeDiff, setCodeDiff] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const [copyMessage, setCopyMessage] = useState(null)
+
+  const requiresSpec = mode !== 'anti_ai_slop'
+  const specTooLong = specInput.length > 20000
+  const diffTooLong = codeDiff.length > 100000
+  const canSubmit = !busy && !specTooLong && !diffTooLong && (!requiresSpec || specInput.trim())
+
+  const handleGenerate = async event => {
+    event.preventDefault()
+    setError(null)
+    setCopyMessage(null)
+    if (!canSubmit) {
+      setError('Acceptance criteria are required for spec-based passport modes.')
+      return
+    }
+    setBusy(true)
+    try {
+      await onGenerate({
+        mode,
+        spec_source_type: 'manual',
+        spec_source_ref: specRef.trim() || null,
+        spec_input: specInput.trim() || null,
+        code_diff: codeDiff.trim() || null,
+      })
+      setSpecInput('')
+      setCodeDiff('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate passport')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setError(null)
+    setBusy(true)
+    try {
+      await onDelete()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete passport')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleCopyQa = async () => {
+    if (!passport?.qa_steps?.length || !navigator.clipboard) return
+    const text = passport.qa_steps
+      .map(step => {
+        const command = step.command ? `\nCommand: ${step.command}` : ''
+        return `${step.step}. ${step.title}${command}\nExpected: ${step.expected}`
+      })
+      .join('\n\n')
+    await navigator.clipboard.writeText(text)
+    setCopyMessage('QA script copied.')
+  }
+
+  const verdictClass = PASSPORT_VERDICT_CLASSES[passport?.verdict] ?? PASSPORT_VERDICT_CLASSES.READY_WITH_RISKS
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Review Passport</h2>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Merge readiness, evidence, and QA.
+          </p>
+        </div>
+        {passport && (
+          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${verdictClass}`}>
+            {PASSPORT_VERDICT_LABELS[passport.verdict] ?? passport.verdict}
+          </span>
+        )}
+      </div>
+
+      {passport ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-lg bg-gray-50 dark:bg-gray-900 px-3 py-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Confidence</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">{passport.confidence_score}%</p>
+            </div>
+            <div className="rounded-lg bg-gray-50 dark:bg-gray-900 px-3 py-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Criteria</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">{passport.coverage_summary?.length ?? 0}</p>
+            </div>
+            <div className="rounded-lg bg-gray-50 dark:bg-gray-900 px-3 py-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Signals</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">{passport.anti_slop_signals?.length ?? 0}</p>
+            </div>
+          </div>
+
+          {passport.coverage_summary?.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2">Coverage</p>
+              <div className="space-y-2">
+                {passport.coverage_summary.map(item => (
+                  <div key={item.criterion_id} className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm text-gray-800 dark:text-gray-200">{item.criterion}</p>
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{item.status}</span>
+                    </div>
+                    {item.evidence?.[0]?.summary && (
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.evidence[0].summary}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {passport.anti_slop_signals?.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2">Anti-AI-Slop Signals</p>
+              <div className="space-y-2">
+                {passport.anti_slop_signals.map(signal => (
+                  <div key={`${signal.type}-${signal.summary}`} className="rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 px-3 py-2">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">{signal.summary}</p>
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{signal.suggestion}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {passport.qa_steps?.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Manual QA Script</p>
+                <button
+                  type="button"
+                  onClick={handleCopyQa}
+                  className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Copy
+                </button>
+              </div>
+              <ol className="space-y-2">
+                {passport.qa_steps.map(step => (
+                  <li key={step.step} className="rounded-lg bg-gray-50 dark:bg-gray-900 px-3 py-2">
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{step.step}. {step.title}</p>
+                    {step.command && <p className="mt-1 font-mono text-xs text-gray-500 dark:text-gray-400">{step.command}</p>}
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{step.expected}</p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={busy}
+              className="text-xs font-medium text-red-600 dark:text-red-400 hover:underline disabled:opacity-50"
+            >
+              Delete passport
+            </button>
+            {copyMessage && <span className="text-xs text-green-600 dark:text-green-400">{copyMessage}</span>}
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={handleGenerate} className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {[
+              ['combined', 'Combined'],
+              ['spec_evidence', 'Spec evidence'],
+              ['anti_ai_slop', 'Anti-AI-Slop'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setMode(value)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  mode === value
+                    ? 'bg-blue-600 border-blue-600 text-white'
+                    : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <input
+            value={specRef}
+            onChange={event => setSpecRef(event.target.value)}
+            placeholder="Source reference, e.g. Issue #53"
+            maxLength={120}
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-white"
+          />
+
+          <textarea
+            value={specInput}
+            onChange={event => setSpecInput(event.target.value)}
+            placeholder="Paste acceptance criteria or issue/spec text"
+            rows={5}
+            maxLength={20000}
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-white"
+          />
+
+          <textarea
+            value={codeDiff}
+            onChange={event => setCodeDiff(event.target.value)}
+            placeholder="Optional: paste git diff for older reviews without a stored snapshot"
+            rows={4}
+            maxLength={100000}
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-white"
+          />
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className={`text-xs ${specTooLong || diffTooLong ? 'text-red-500' : 'text-gray-400 dark:text-gray-500'}`}>
+              Spec {specInput.length}/20000 · Diff {codeDiff.length}/100000
+            </p>
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {busy ? 'Generating…' : 'Generate passport'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {error && (
+        <p className="mt-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
  * Review detail page. Shows review metadata, per-agent status, and all findings.
  * Subscribes to WebSocket updates while the review is in "analyzing" state.
  *
@@ -132,7 +394,7 @@ function AboutReviewPanel({ agents, lmUsed }) {
 export function ReviewDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { get, post, loading } = useApi()
+  const { get, post, del: delApi, loading } = useApi()
 
   /** @type {[Review|null, function]} */
   const [review, setReview] = useState(null)
@@ -140,6 +402,7 @@ export function ReviewDetail() {
   const [analyzing, setAnalyzing] = useState(false)
   const [postingComment, setPostingComment] = useState(false)
   const [commentMsg, setCommentMsg] = useState(null)
+  const [passport, setPassport] = useState(null)
 
   // Live agent statuses from WebSocket (only active while analyzing)
   const wsReviewId = review?.status === 'analyzing' ? id : null
@@ -155,9 +418,23 @@ export function ReviewDetail() {
     }
   }, [get, id])
 
+  const fetchPassport = useCallback(async () => {
+    try {
+      const data = await get(`/reviews/${id}/passport`)
+      setPassport(data)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : ''
+      if (!message.toLowerCase().includes('passport not found')) {
+        setCommentMsg(`Passport unavailable: ${message || 'unknown error'}`)
+      }
+      setPassport(null)
+    }
+  }, [get, id])
+
   useEffect(() => {
     fetchReview()
-  }, [fetchReview])
+    fetchPassport()
+  }, [fetchReview, fetchPassport])
 
   // Poll every 3s while analyzing (WS handles live updates, poll is the fallback)
   useEffect(() => {
@@ -191,6 +468,16 @@ export function ReviewDetail() {
       setPostingComment(false)
     }
   }, [post, id, fetchReview])
+
+  const handleGeneratePassport = useCallback(async payload => {
+    const data = await post(`/reviews/${id}/passport`, payload)
+    setPassport(data)
+  }, [post, id])
+
+  const handleDeletePassport = useCallback(async () => {
+    await delApi(`/reviews/${id}/passport`)
+    setPassport(null)
+  }, [delApi, id])
 
   // Merge DB agent executions with live WS statuses
   const selectedAgents = review?.selected_agents?.length ? review.selected_agents : KNOWN_AGENTS
@@ -377,6 +664,12 @@ export function ReviewDetail() {
           </div>
 
           <AboutReviewPanel agents={selectedAgents} lmUsed={review.lm_used} />
+
+          <ReviewPassportPanel
+            passport={passport}
+            onGenerate={handleGeneratePassport}
+            onDelete={handleDeletePassport}
+          />
         </div>
 
         {/* Right: findings table */}
