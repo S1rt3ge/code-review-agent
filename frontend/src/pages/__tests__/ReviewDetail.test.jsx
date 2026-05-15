@@ -86,6 +86,9 @@ const PASSPORT_RESPONSE = {
   github_comment_id: null,
   github_comment_url: null,
   github_comment_posted_at: null,
+  github_gate_state: null,
+  github_gate_url: null,
+  github_gate_posted_at: null,
   generated_at: '2026-04-27T10:02:00Z',
   created_at: '2026-04-27T10:02:00Z',
   updated_at: '2026-04-27T10:02:00Z',
@@ -264,5 +267,38 @@ describe('ReviewDetail page', () => {
     expect(postRequest.method).toBe('POST')
     expect(fetch.mock.calls[2][0]).toContain('/reviews/review-1/passport/markdown')
     expect(fetch.mock.calls[3][0]).toContain('/reviews/review-1/passport/post-comment')
+  })
+
+  it('publishes the review passport gate as a commit status', async () => {
+    const user = userEvent.setup()
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify(REVIEW_RESPONSE), { status: 200 }))
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify(PASSPORT_RESPONSE), { status: 200 }))
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({
+      context: 'AI Review Passport Gate',
+      verdict: 'READY_WITH_RISKS',
+      state: 'failure',
+      description: 'Review Passport READY_WITH_RISKS: review required before merge.',
+      required_action: 'review_risks',
+      github_gate_state: 'failure',
+      github_gate_url: 'https://api.github.com/repos/test/repo/statuses/abcdef123456',
+      github_gate_posted_at: '2026-04-27T10:06:00Z',
+    }), { status: 200 }))
+
+    renderReviewDetail()
+
+    await screen.findByText('Ready with risks')
+    expect(screen.getByText(/Gate status/i)).toBeInTheDocument()
+    expect(screen.getByText(/failure/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /publish gate/i }))
+
+    expect(await screen.findByText(/Gate published to GitHub/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /view gate status/i })).toHaveAttribute(
+      'href',
+      'https://api.github.com/repos/test/repo/statuses/abcdef123456'
+    )
+    const [, gateRequest] = fetch.mock.calls[2]
+    expect(gateRequest.method).toBe('POST')
+    expect(fetch.mock.calls[2][0]).toContain('/reviews/review-1/passport/gate/publish')
   })
 })

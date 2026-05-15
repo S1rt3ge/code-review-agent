@@ -63,6 +63,24 @@ const PASSPORT_VERDICT_LABELS = {
   BLOCKED: 'Blocked',
 }
 
+const PASSPORT_GATE_BY_VERDICT = {
+  READY: {
+    state: 'success',
+    description: 'Review Passport READY: evidence covers merge criteria.',
+    required_action: 'merge_ready',
+  },
+  READY_WITH_RISKS: {
+    state: 'failure',
+    description: 'Review Passport READY_WITH_RISKS: review required before merge.',
+    required_action: 'review_risks',
+  },
+  BLOCKED: {
+    state: 'failure',
+    description: 'Review Passport BLOCKED: missing required evidence.',
+    required_action: 'fix_blockers',
+  },
+}
+
 /**
  * Format seconds into a human-readable duration string.
  * @param {number} seconds
@@ -100,6 +118,28 @@ function MetaRow({ label, children }) {
       <span className="text-sm text-gray-800 dark:text-gray-200 min-w-0 break-all">{children}</span>
     </div>
   )
+}
+
+/**
+ * Build a display-only gate state from the existing passport payload.
+ * @param {any} passport
+ * @returns {any}
+ */
+function buildPassportGateView(passport) {
+  const fallback = {
+    state: 'error',
+    description: 'Review Passport gate could not map the current verdict.',
+    required_action: 'investigate_gate',
+  }
+  const gate = PASSPORT_GATE_BY_VERDICT[passport?.verdict] ?? fallback
+  return {
+    ...gate,
+    context: 'AI Review Passport Gate',
+    verdict: passport?.verdict ?? 'UNKNOWN',
+    github_gate_state: passport?.github_gate_state ?? null,
+    github_gate_url: passport?.github_gate_url ?? null,
+    github_gate_posted_at: passport?.github_gate_posted_at ?? null,
+  }
 }
 
 /**
@@ -142,11 +182,12 @@ function AboutReviewPanel({ agents, lmUsed }) {
  *   onGenerate: (payload: any) => Promise<void>,
  *   onDelete: () => Promise<void>,
  *   onCopyMarkdown: () => Promise<string>,
- *   onPostToPr: () => Promise<any>
+ *   onPostToPr: () => Promise<any>,
+ *   onPublishGate: () => Promise<any>
  * }} props
  * @returns {React.ReactElement}
  */
-function ReviewPassportPanel({ passport, onGenerate, onDelete, onCopyMarkdown, onPostToPr }) {
+function ReviewPassportPanel({ passport, onGenerate, onDelete, onCopyMarkdown, onPostToPr, onPublishGate }) {
   const [mode, setMode] = useState('combined')
   const [specRef, setSpecRef] = useState('')
   const [specInput, setSpecInput] = useState('')
@@ -243,7 +284,23 @@ function ReviewPassportPanel({ passport, onGenerate, onDelete, onCopyMarkdown, o
     }
   }
 
+  const handlePublishGate = async () => {
+    setError(null)
+    setCopyMessage(null)
+    setBusy(true)
+    try {
+      await onPublishGate()
+      setCopyMessage('Gate published to GitHub.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to publish gate')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const verdictClass = PASSPORT_VERDICT_CLASSES[passport?.verdict] ?? PASSPORT_VERDICT_CLASSES.READY_WITH_RISKS
+  const gate = passport ? buildPassportGateView(passport) : null
+  const gateState = gate?.github_gate_state ?? gate?.state
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
@@ -277,6 +334,30 @@ function ReviewPassportPanel({ passport, onGenerate, onDelete, onCopyMarkdown, o
               <p className="text-lg font-semibold text-gray-900 dark:text-white">{passport.anti_slop_signals?.length ?? 0}</p>
             </div>
           </div>
+
+          {gate && (
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Gate status</p>
+                  <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">{gate.description}</p>
+                </div>
+                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                  gateState === 'success'
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                    : gateState === 'failure'
+                      ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                      : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                }`}>
+                  {gateState}
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                Action: {gate.required_action.replaceAll('_', ' ')}
+                {gate.github_gate_posted_at ? ` · Last published ${formatDate(gate.github_gate_posted_at)}` : ''}
+              </p>
+            </div>
+          )}
 
           {passport.coverage_summary?.length > 0 && (
             <div>
@@ -354,6 +435,14 @@ function ReviewPassportPanel({ passport, onGenerate, onDelete, onCopyMarkdown, o
             </button>
             <button
               type="button"
+              onClick={handlePublishGate}
+              disabled={busy}
+              className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+            >
+              Publish Gate
+            </button>
+            <button
+              type="button"
               onClick={handleDelete}
               disabled={busy}
               className="text-xs font-medium text-red-600 dark:text-red-400 hover:underline disabled:opacity-50"
@@ -369,6 +458,16 @@ function ReviewPassportPanel({ passport, onGenerate, onDelete, onCopyMarkdown, o
                 className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
               >
                 View PR comment
+              </a>
+            )}
+            {passport.github_gate_url && (
+              <a
+                href={passport.github_gate_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                View gate status
               </a>
             )}
           </div>
@@ -553,6 +652,19 @@ export function ReviewDetail() {
           github_comment_id: data.comment_id,
           github_comment_url: data.url,
           github_comment_posted_at: data.posted_at,
+        }
+      : current)
+    return data
+  }, [post, id])
+
+  const handlePublishPassportGate = useCallback(async () => {
+    const data = await post(`/reviews/${id}/passport/gate/publish`, {})
+    setPassport(current => current
+      ? {
+          ...current,
+          github_gate_state: data.github_gate_state,
+          github_gate_url: data.github_gate_url,
+          github_gate_posted_at: data.github_gate_posted_at,
         }
       : current)
     return data
@@ -750,6 +862,7 @@ export function ReviewDetail() {
             onDelete={handleDeletePassport}
             onCopyMarkdown={handleCopyPassportMarkdown}
             onPostToPr={handlePostPassportToPr}
+            onPublishGate={handlePublishPassportGate}
           />
         </div>
 
