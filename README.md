@@ -22,6 +22,7 @@ This project was built as an end-to-end engineering exercise in backend architec
 - React dashboard for review history, settings, and real-time execution state
 - Durable database-backed analysis queue with retry, stale-lock recovery, and health diagnostics
 - Local Review Playground for demo and pasted-diff reviews without GitHub or paid AI providers
+- Review Passport with acceptance-criteria coverage, anti-slop signals, and merge-readiness verdicts
 - Deterministic review quality evals for local regression checks
 - GitHub webhook / PR comment integration
 - Production hardening across auth, CI, release gating, dependency hygiene, and governance
@@ -42,6 +43,7 @@ For local evaluation, the dashboard also includes a Local Review Playground:
 1. Click `Try demo review` to create an instant deterministic review from a bundled diff.
 2. Click `Paste diff` to review a local git diff without creating a GitHub App.
 3. Open the generated review detail page to inspect findings, agent status, and zero-cost local execution.
+4. Generate a Review Passport to turn the review into an evidence-backed merge-readiness artifact.
 
 ## Architecture
 
@@ -100,6 +102,12 @@ This includes:
 ### Real-time user feedback
 
 The frontend subscribes to review progress through WebSockets so users can see analysis state changes while the backend processes a review.
+
+### Review Passport
+
+Review detail pages can generate a Review Passport from the review findings, diff snapshot, and optional acceptance criteria.
+
+The passport gives the change a merge-readiness verdict, highlights covered and missing criteria, reports anti-slop signals such as missing tests or placeholder implementation, and produces a short QA script that a reviewer can run locally.
 
 ### Auth and account lifecycle
 
@@ -302,6 +310,12 @@ After Docker starts, open `http://localhost:5173`, create an account, and click
 `Try demo review` on the dashboard. This creates a completed review using the
 local playground analyzer, so no SMTP, GitHub App, OpenAI, Anthropic, or Ollama
 setup is required for the first product walkthrough.
+
+Open the generated review detail page and generate a Review Passport with sample
+acceptance criteria. The bundled demo intentionally receives a `BLOCKED` verdict
+because the diff contains unsafe code and missing test evidence.
+
+For a full walkthrough, see [`docs/local-demo.md`](docs/local-demo.md).
 
 ## Testing
 

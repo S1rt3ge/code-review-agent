@@ -8,6 +8,8 @@ AI-assisted code review platform for GitHub PRs and local pasted diffs. It shoul
 - `PROJECT_IDEA.md` - product vision and business context.
 - `TECHNICAL_SPEC.md` - original architecture and system constraints.
 - `docs/LOCAL_REVIEW_PLAYGROUND_SPEC.md` - local demo and pasted-diff flow.
+- `docs/REVIEW_PASSPORT_SPEC.md` - Review Passport and Anti-AI-Slop Mode behavior.
+- `docs/local-demo.md` - end-to-end local demo walkthrough.
 - `SPEC_TEMPLATE.md` - template for new feature specs.
 - `.claude/rules/*.md` - optional local Claude rules when present.
 
@@ -79,6 +81,6 @@ Docker and local dev may set `AUTH_REQUIRE_EMAIL_VERIFICATION=false` so registra
 ## Current Product Priorities
 1. Smooth local onboarding through Docker.
 2. A convincing Local Review Playground for demos and offline testing.
-3. Deterministic review quality evals that prove findings stay useful.
-4. Reliable GitHub PR review path with clear provider boundaries.
-5. Focused, actionable findings rather than noisy review output.
+3. Review Passport evidence that turns findings into a merge-readiness artifact.
+4. Deterministic review quality evals that prove findings stay useful.
+5. Reliable GitHub PR review path with clear provider boundaries.
