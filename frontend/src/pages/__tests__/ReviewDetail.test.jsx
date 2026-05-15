@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ReviewDetail } from '../ReviewDetail.jsx'
@@ -165,5 +166,65 @@ describe('ReviewDetail page', () => {
     expect(screen.getByText('User can run local demo')).toBeInTheDocument()
     expect(screen.getByText('Application code changed without matching test changes')).toBeInTheDocument()
     expect(screen.getByText('docker compose up --build')).toBeInTheDocument()
+  })
+
+  it('generates a review passport from acceptance criteria', async () => {
+    const user = userEvent.setup()
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify(REVIEW_RESPONSE), { status: 200 }))
+    fetch.mockResolvedValueOnce(passportNotFoundResponse())
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify(PASSPORT_RESPONSE), { status: 200 }))
+
+    renderReviewDetail()
+
+    await screen.findByRole('button', { name: /generate passport/i })
+
+    await user.type(screen.getByPlaceholderText(/source reference/i), 'Issue #53')
+    await user.type(screen.getByPlaceholderText(/acceptance criteria/i), '- User can run local demo')
+    await user.type(screen.getByPlaceholderText(/paste git diff/i), '+ docker compose up --build')
+    await user.click(screen.getByRole('button', { name: /generate passport/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Ready with risks')).toBeInTheDocument()
+    })
+
+    expect(fetch).toHaveBeenCalledTimes(3)
+    const [, requestOptions] = fetch.mock.calls[2]
+    expect(requestOptions.method).toBe('POST')
+    expect(JSON.parse(requestOptions.body)).toEqual({
+      mode: 'combined',
+      spec_source_type: 'manual',
+      spec_source_ref: 'Issue #53',
+      spec_input: '- User can run local demo',
+      code_diff: '+ docker compose up --build',
+    })
+  })
+
+  it('copies and deletes an existing review passport', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify(REVIEW_RESPONSE), { status: 200 }))
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify(PASSPORT_RESPONSE), { status: 200 }))
+    fetch.mockResolvedValueOnce(new Response(null, { status: 204 }))
+
+    renderReviewDetail()
+
+    await screen.findByText('Ready with risks')
+
+    await user.click(screen.getByRole('button', { name: /copy/i }))
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('docker compose up --build'))
+    expect(screen.getByText('QA script copied.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /delete passport/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /generate passport/i })).toBeInTheDocument()
+    })
+
+    const [, requestOptions] = fetch.mock.calls[2]
+    expect(requestOptions.method).toBe('DELETE')
   })
 })
