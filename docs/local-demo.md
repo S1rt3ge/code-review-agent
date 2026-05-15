@@ -59,7 +59,9 @@ The pasted-diff path is the fastest way to test the product against real local w
 
 Use `Copy Markdown` in the Review Passport panel to copy a portable report with verdict, criteria coverage, anti-slop signals, and QA steps.
 
-For local playground reviews, GitHub posting is intentionally unavailable because the review is backed by `local://playground`. For GitHub-backed reviews with a configured GitHub App installation, `Post to PR` creates or updates a dedicated Review Passport comment on the pull request.
+The panel also shows the derived gate status. `READY` maps to a passing GitHub commit status, while `READY_WITH_RISKS` and `BLOCKED` map to failing statuses.
+
+For local playground reviews, GitHub posting and `Publish Gate` are intentionally unavailable because the review is backed by `local://playground`. For GitHub-backed reviews with a configured GitHub App installation, `Post to PR` creates or updates a dedicated Review Passport comment on the pull request, and `Publish Gate` posts the `AI Review Passport Gate` commit status to the PR head SHA.
 
 ## Stop The Stack
 

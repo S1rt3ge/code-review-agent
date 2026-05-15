@@ -109,7 +109,7 @@ Review detail pages can generate a Review Passport from the review findings, dif
 
 The passport gives the change a merge-readiness verdict, highlights covered and missing criteria, reports anti-slop signals such as missing tests or placeholder implementation, and produces a short QA script that a reviewer can run locally.
 
-Passports can also be copied as Markdown for local/demo workflows or posted back to GitHub as a PR comment for GitHub-backed reviews.
+Passports can also be copied as Markdown for local/demo workflows, posted back to GitHub as a PR comment, or published as the `AI Review Passport Gate` commit status for GitHub-backed reviews. `READY` publishes a passing status; `READY_WITH_RISKS` and `BLOCKED` publish failing statuses so branch protection can require the passport before merge.
 
 ### Auth and account lifecycle
 
@@ -317,8 +317,9 @@ Open the generated review detail page and generate a Review Passport with sample
 acceptance criteria. The bundled demo intentionally receives a `BLOCKED` verdict
 because the diff contains unsafe code and missing test evidence.
 
-Use `Copy Markdown` to export the passport locally. GitHub PR posting is
-available for GitHub-backed reviews with a configured GitHub App installation.
+Use `Copy Markdown` to export the passport locally. GitHub PR posting and
+`Publish Gate` are available for GitHub-backed reviews with a configured GitHub
+App installation.
 
 For a full walkthrough, see [`docs/local-demo.md`](docs/local-demo.md).
 
