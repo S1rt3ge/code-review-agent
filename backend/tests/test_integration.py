@@ -21,7 +21,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import insert, select
 
 from backend.main import app
-from backend.models.db_models import Repository, Review, User
+from backend.models.db_models import Repository, Review, ReviewPassport, User
 from backend.utils import auth_policy
 from backend.utils.database import async_session_factory
 from backend.utils.tokens import hash_token
@@ -1072,3 +1072,284 @@ async def test_analyze_endpoint_queues_analysis(client, auth_headers, db_repo_id
     assert r.status_code == 200
     assert r.json()["status"] == "analyzing"
     enqueue.assert_called_once()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_review_passport_markdown_export_works_for_local_demo(client, auth_headers):
+    r = await client.post(
+        "/api/reviews/playground/demo",
+        json={},
+        headers=auth_headers,
+    )
+    assert r.status_code == 201, r.text
+    review_id = r.json()["id"]
+
+    r = await client.post(
+        f"/api/reviews/{review_id}/passport",
+        json={
+            "mode": "combined",
+            "spec_source_type": "manual",
+            "spec_input": "- Remove unsafe dynamic execution",
+        },
+        headers=auth_headers,
+    )
+    assert r.status_code == 201, r.text
+
+    r = await client.get(
+        f"/api/reviews/{review_id}/passport/markdown",
+        headers=auth_headers,
+    )
+
+    assert r.status_code == 200, r.text
+    body = r.json()["body"]
+    assert "## Review Passport" in body
+    assert "BLOCKED" in body
+    assert "Remove unsafe dynamic execution" in body
+    assert "Manual QA Script" in body
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_review_passport_post_comment_rejects_local_demo(client, auth_headers):
+    r = await client.post(
+        "/api/reviews/playground/demo",
+        json={},
+        headers=auth_headers,
+    )
+    review_id = r.json()["id"]
+    await client.post(
+        f"/api/reviews/{review_id}/passport",
+        json={
+            "mode": "anti_ai_slop",
+            "spec_source_type": "manual",
+        },
+        headers=auth_headers,
+    )
+
+    r = await client.post(
+        f"/api/reviews/{review_id}/passport/post-comment",
+        json={},
+        headers=auth_headers,
+    )
+
+    assert r.status_code == 400
+    assert "local" in r.json()["detail"].lower()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_review_passport_gate_works_for_local_demo_but_publish_is_blocked(
+    client,
+    auth_headers,
+):
+    r = await client.post(
+        "/api/reviews/playground/demo",
+        json={},
+        headers=auth_headers,
+    )
+    assert r.status_code == 201, r.text
+    review_id = r.json()["id"]
+
+    r = await client.post(
+        f"/api/reviews/{review_id}/passport",
+        json={
+            "mode": "combined",
+            "spec_source_type": "manual",
+            "spec_input": "- Remove unsafe dynamic execution",
+        },
+        headers=auth_headers,
+    )
+    assert r.status_code == 201, r.text
+
+    r = await client.get(
+        f"/api/reviews/{review_id}/passport/gate",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["context"] == "AI Review Passport Gate"
+    assert r.json()["verdict"] == "BLOCKED"
+    assert r.json()["state"] == "failure"
+
+    r = await client.post(
+        f"/api/reviews/{review_id}/passport/gate/publish",
+        json={},
+        headers=auth_headers,
+    )
+
+    assert r.status_code == 400
+    assert "local" in r.json()["detail"].lower()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_review_passport_post_comment_posts_and_updates_existing_comment(
+    client,
+    auth_headers,
+):
+    me = await client.get("/api/auth/me", headers=auth_headers)
+    user_id = me.json()["id"]
+    repo_id = uuid.uuid4()
+    review_id = uuid.uuid4()
+
+    async with async_session_factory() as session:
+        await session.execute(
+            insert(Repository).values(
+                id=repo_id,
+                user_id=user_id,
+                github_repo_owner="testorg",
+                github_repo_name="passportrepo",
+                github_repo_url="https://github.com/testorg/passportrepo",
+                github_installation_id=42,
+                enabled=True,
+            )
+        )
+        await session.execute(
+            insert(Review).values(
+                id=review_id,
+                user_id=user_id,
+                repo_id=repo_id,
+                github_pr_number=77,
+                github_pr_title="Add passport export",
+                head_sha="abcdef123456",
+                status="done",
+                selected_agents=["security"],
+                total_findings=0,
+            )
+        )
+        await session.commit()
+
+    r = await client.post(
+        f"/api/reviews/{review_id}/passport",
+        json={
+            "mode": "anti_ai_slop",
+            "spec_source_type": "manual",
+            "code_diff": "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,2 @@\n+print('hello')",
+        },
+        headers=auth_headers,
+    )
+    assert r.status_code == 201, r.text
+
+    github_client = AsyncMock()
+    github_client.post_pr_comment.return_value = {
+        "id": 12345,
+        "url": "https://github.com/testorg/passportrepo/issues/77#issuecomment-12345",
+    }
+    github_client.update_pr_comment.return_value = None
+
+    with patch("backend.routers.reviews.get_github_client", return_value=github_client):
+        r = await client.post(
+            f"/api/reviews/{review_id}/passport/post-comment",
+            json={},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["comment_id"] == 12345
+        posted_body = github_client.post_pr_comment.call_args.kwargs["body"]
+        assert "## Review Passport" in posted_body
+
+        r = await client.post(
+            f"/api/reviews/{review_id}/passport/post-comment",
+            json={},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200, r.text
+        github_client.update_pr_comment.assert_awaited_once()
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(ReviewPassport).where(ReviewPassport.review_id == review_id)
+        )
+        passport = result.scalar_one()
+
+    assert passport.github_comment_id == 12345
+    assert passport.github_comment_url.endswith("issuecomment-12345")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_review_passport_gate_publish_posts_commit_status_and_persists_metadata(
+    client,
+    auth_headers,
+):
+    me = await client.get("/api/auth/me", headers=auth_headers)
+    user_id = me.json()["id"]
+    repo_id = uuid.uuid4()
+    review_id = uuid.uuid4()
+
+    async with async_session_factory() as session:
+        await session.execute(
+            insert(Repository).values(
+                id=repo_id,
+                user_id=user_id,
+                github_repo_owner="testorg",
+                github_repo_name="gaterepo",
+                github_repo_url="https://github.com/testorg/gaterepo",
+                github_installation_id=42,
+                enabled=True,
+            )
+        )
+        await session.execute(
+            insert(Review).values(
+                id=review_id,
+                user_id=user_id,
+                repo_id=repo_id,
+                github_pr_number=78,
+                github_pr_title="Add passport gate",
+                head_sha="abcdef123456",
+                status="done",
+                selected_agents=["security"],
+                total_findings=0,
+            )
+        )
+        await session.commit()
+
+    r = await client.post(
+        f"/api/reviews/{review_id}/passport",
+        json={
+            "mode": "anti_ai_slop",
+            "spec_source_type": "manual",
+            "code_diff": "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,2 @@\n+print('hello')",
+        },
+        headers=auth_headers,
+    )
+    assert r.status_code == 201, r.text
+
+    github_client = AsyncMock()
+    github_client.post_commit_status.return_value = {
+        "id": 98765,
+        "url": "https://api.github.com/repos/testorg/gaterepo/statuses/abcdef123456",
+    }
+
+    with patch("backend.routers.reviews.get_github_client", return_value=github_client):
+        r = await client.post(
+            f"/api/reviews/{review_id}/passport/gate/publish",
+            json={},
+            headers=auth_headers,
+        )
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["context"] == "AI Review Passport Gate"
+    assert body["github_gate_state"] == body["state"]
+    assert body["github_gate_url"].endswith("/statuses/abcdef123456")
+    assert body["github_gate_posted_at"] is not None
+    github_client.post_commit_status.assert_awaited_once()
+    call_kwargs = github_client.post_commit_status.call_args.kwargs
+    assert call_kwargs["owner"] == "testorg"
+    assert call_kwargs["repo"] == "gaterepo"
+    assert call_kwargs["sha"] == "abcdef123456"
+    assert call_kwargs["state"] == body["state"]
+    assert call_kwargs["context"] == "AI Review Passport Gate"
+    assert call_kwargs["description"] == body["description"]
+    assert call_kwargs["installation_id"] == 42
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(ReviewPassport).where(ReviewPassport.review_id == review_id)
+        )
+        passport = result.scalar_one()
+
+    assert passport.github_gate_state == body["state"]
+    assert passport.github_gate_url.endswith("/statuses/abcdef123456")
+    assert passport.github_gate_posted_at is not None

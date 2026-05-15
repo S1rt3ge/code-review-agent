@@ -26,6 +26,7 @@ Classes:
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -400,6 +401,80 @@ class PlaygroundDiffReviewRequest(BaseModel):
     selected_agents: list[str] = Field(
         default_factory=lambda: ["security", "performance", "style", "logic"],
     )
+
+
+# ---------------------------------------------------------------------------
+# Review Passport
+# ---------------------------------------------------------------------------
+
+
+class ReviewPassportRequest(BaseModel):
+    """Request body for creating or replacing a Review Passport."""
+
+    mode: str = Field(default="combined", max_length=32)
+    spec_source_type: str = Field(default="manual", max_length=32)
+    spec_source_ref: str | None = Field(default=None, max_length=120)
+    spec_input: str | None = Field(default=None, max_length=20_000)
+    code_diff: str | None = Field(default=None, max_length=100_000)
+
+    @field_validator("mode", "spec_source_type")
+    @classmethod
+    def strip_short_text(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("spec_source_ref", "spec_input", "code_diff")
+    @classmethod
+    def strip_optional_text(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
+
+
+class ReviewPassportResponse(BaseModel):
+    """Evidence-backed merge readiness packet for a review."""
+
+    id: UUID
+    review_id: UUID
+    user_id: UUID
+    mode: str
+    spec_source_type: str
+    spec_source_ref: str | None = None
+    spec_input: str | None = None
+    spec_digest: str
+    verdict: str
+    confidence_score: int
+    coverage_summary: list[dict[str, Any]] = Field(default_factory=list)
+    anti_slop_signals: list[dict[str, Any]] = Field(default_factory=list)
+    qa_steps: list[dict[str, Any]] = Field(default_factory=list)
+    missing_evidence: list[dict[str, Any]] = Field(default_factory=list)
+    github_comment_id: int | None = None
+    github_comment_url: str | None = None
+    github_comment_posted_at: datetime | None = None
+    github_gate_state: str | None = None
+    github_gate_url: str | None = None
+    github_gate_posted_at: datetime | None = None
+    generated_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReviewPassportGateResponse(BaseModel):
+    """GitHub merge gate state derived from a Review Passport verdict."""
+
+    context: str
+    verdict: str
+    state: str
+    description: str
+    required_action: str
+    github_gate_state: str | None = None
+    github_gate_url: str | None = None
+    github_gate_posted_at: datetime | None = None
+
+
+class ReviewPassportMarkdownResponse(BaseModel):
+    """Markdown export body for a Review Passport."""
+
+    body: str
 
 
 # ---------------------------------------------------------------------------

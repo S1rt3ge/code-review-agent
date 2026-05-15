@@ -6,6 +6,8 @@ Classes:
     Review: Code review records tied to pull requests.
     Finding: Individual findings produced by analysis agents.
     AgentExecution: Execution metadata for each agent run.
+    ReviewPassport: Evidence-backed merge readiness packet.
+    ReviewInputSnapshot: Stored normalized review input for deterministic evidence.
     AuditLog: Audit trail of user and system actions.
 """
 
@@ -17,6 +19,7 @@ from typing import Any
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
@@ -91,6 +94,14 @@ class User(Base):
         cascade="all, delete-orphan",
     )
     reviews: Mapped[list["Review"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    review_passports: Mapped[list["ReviewPassport"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    review_input_snapshots: Mapped[list["ReviewInputSnapshot"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )
@@ -206,6 +217,15 @@ class Review(Base):
         cascade="all, delete-orphan",
     )
     agent_executions: Mapped[list["AgentExecution"]] = relationship(
+        back_populates="review",
+        cascade="all, delete-orphan",
+    )
+    passport: Mapped["ReviewPassport | None"] = relationship(
+        back_populates="review",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    input_snapshots: Mapped[list["ReviewInputSnapshot"]] = relationship(
         back_populates="review",
         cascade="all, delete-orphan",
     )
@@ -334,6 +354,134 @@ class AgentExecution(Base):
 
     # Relationships
     review: Mapped["Review"] = relationship(back_populates="agent_executions")
+
+
+class ReviewPassport(Base):
+    """Evidence-backed merge readiness packet for one review."""
+
+    __tablename__ = "review_passports"
+    __table_args__ = (
+        UniqueConstraint("review_id", name="uq_review_passports_review_id"),
+        CheckConstraint(
+            "mode IN ('spec_evidence', 'anti_ai_slop', 'combined')",
+            name="ck_review_passports_mode",
+        ),
+        CheckConstraint(
+            "spec_source_type IN ('manual', 'local_demo', 'pr_body', 'github_issue')",
+            name="ck_review_passports_spec_source_type",
+        ),
+        CheckConstraint(
+            "verdict IN ('READY', 'READY_WITH_RISKS', 'BLOCKED')",
+            name="ck_review_passports_verdict",
+        ),
+        CheckConstraint(
+            "confidence_score >= 0 AND confidence_score <= 100",
+            name="ck_review_passports_confidence_score",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    review_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("reviews.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    mode: Mapped[str] = mapped_column(Text, nullable=False)
+    spec_source_type: Mapped[str] = mapped_column(Text, nullable=False)
+    spec_source_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    spec_input: Mapped[str | None] = mapped_column(Text, nullable=True)
+    spec_digest: Mapped[str] = mapped_column(Text, nullable=False)
+    verdict: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    coverage_summary: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    anti_slop_signals: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    qa_steps: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    missing_evidence: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    github_comment_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    github_comment_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    github_comment_posted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    github_gate_state: Mapped[str | None] = mapped_column(Text, nullable=True)
+    github_gate_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    github_gate_posted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    review: Mapped["Review"] = relationship(back_populates="passport")
+    user: Mapped["User"] = relationship(back_populates="review_passports")
+
+
+class ReviewInputSnapshot(Base):
+    """Normalized review input stored for deterministic passport evidence."""
+
+    __tablename__ = "review_input_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "review_id",
+            "input_type",
+            name="uq_review_input_snapshots_review_type",
+        ),
+        CheckConstraint(
+            "input_type IN ('diff')",
+            name="ck_review_input_snapshots_input_type",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    review_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("reviews.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    input_type: Mapped[str] = mapped_column(Text, nullable=False)
+    content_digest: Mapped[str] = mapped_column(Text, nullable=False)
+    changed_files: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    added_lines: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    review: Mapped["Review"] = relationship(back_populates="input_snapshots")
+    user: Mapped["User"] = relationship(back_populates="review_input_snapshots")
 
 
 class AuditLog(Base):

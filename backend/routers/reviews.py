@@ -28,6 +28,10 @@ from backend.models.schemas import (
     PostCommentResponse,
     PlaygroundDemoReviewRequest,
     PlaygroundDiffReviewRequest,
+    ReviewPassportGateResponse,
+    ReviewPassportMarkdownResponse,
+    ReviewPassportRequest,
+    ReviewPassportResponse,
     ReviewListItem,
     ReviewListResponse,
     ReviewResponse,
@@ -36,6 +40,13 @@ from backend.services.analysis_queue import enqueue_analysis
 from backend.services.github_api import get_github_client
 from backend.services.playground_review import DEMO_DIFF, create_playground_review
 from backend.services.pr_commenter import build_comment
+from backend.services.review_passport_commenter import build_passport_markdown
+from backend.services.review_passport import (
+    create_or_replace_review_passport,
+    delete_review_passport,
+    get_review_passport,
+)
+from backend.services.review_passport_gate import build_passport_gate
 from backend.utils.auth import create_review_ws_ticket, get_current_user
 from backend.utils.database import get_db
 
@@ -67,6 +78,31 @@ def _validate_agents(agent_names: list[str]) -> list[str]:
             detail=f"Unknown agent names: {', '.join(invalid)}",
         )
     return normalized
+
+
+async def _get_review_for_passport(
+    session: AsyncSession,
+    review_id: uuid.UUID,
+    current_user: User,
+) -> Review:
+    """Load a review for passport operations with explicit ownership handling."""
+    result = await session.execute(
+        select(Review)
+        .where(Review.id == review_id)
+        .options(selectinload(Review.findings))
+    )
+    review = result.scalar_one_or_none()
+    if review is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review not found",
+        )
+    if review.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Review does not belong to the current user",
+        )
+    return review
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +280,285 @@ async def create_playground_diff_review(
 
     logger.info("Created local playground diff review %s", review.id)
     return ReviewResponse.model_validate(review)
+
+
+@router.post(
+    "/{review_id}/passport",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ReviewPassportResponse,
+)
+async def create_review_passport(
+    review_id: uuid.UUID,
+    payload: ReviewPassportRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewPassportResponse:
+    """Create or replace an evidence-backed passport for a review."""
+    review = await _get_review_for_passport(session, review_id, current_user)
+    try:
+        passport = await create_or_replace_review_passport(
+            session,
+            review=review,
+            current_user=current_user,
+            mode=payload.mode,
+            spec_source_type=payload.spec_source_type,
+            spec_source_ref=payload.spec_source_ref,
+            spec_input=payload.spec_input,
+            code_diff=payload.code_diff,
+        )
+    except OverflowError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return ReviewPassportResponse.model_validate(passport)
+
+
+@router.get("/{review_id}/passport", response_model=ReviewPassportResponse)
+async def get_passport(
+    review_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewPassportResponse:
+    """Return an existing Review Passport for an owned review."""
+    await _get_review_for_passport(session, review_id, current_user)
+    passport = await get_review_passport(session, review_id, current_user.id)
+    if passport is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review passport not found",
+        )
+    return ReviewPassportResponse.model_validate(passport)
+
+
+@router.get(
+    "/{review_id}/passport/gate",
+    response_model=ReviewPassportGateResponse,
+)
+async def get_passport_gate(
+    review_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewPassportGateResponse:
+    """Return the merge gate state derived from an existing Review Passport."""
+    await _get_review_for_passport(session, review_id, current_user)
+    passport = await get_review_passport(session, review_id, current_user.id)
+    if passport is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review passport not found",
+        )
+    return ReviewPassportGateResponse.model_validate(build_passport_gate(passport))
+
+
+@router.post(
+    "/{review_id}/passport/gate/publish",
+    response_model=ReviewPassportGateResponse,
+)
+async def publish_passport_gate(
+    review_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewPassportGateResponse:
+    """Publish the Review Passport verdict as a GitHub commit status."""
+    review = await _get_review_for_passport(session, review_id, current_user)
+    passport = await get_review_passport(session, review_id, current_user.id)
+    if passport is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review passport not found",
+        )
+
+    repo = await session.get(Repository, review.repo_id)
+    if repo is None or repo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository not found for this review",
+        )
+    if repo.github_repo_url == "local://playground":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Local playground reviews cannot publish GitHub gate statuses",
+        )
+    if not review.head_sha:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Review head SHA is required to publish a GitHub gate status",
+        )
+
+    github_client = get_github_client()
+    if github_client is None or repo.github_installation_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GitHub App is not configured; cannot publish passport gate",
+        )
+
+    gate = build_passport_gate(passport)
+    try:
+        result = await github_client.post_commit_status(
+            owner=repo.github_repo_owner,
+            repo=repo.github_repo_name,
+            sha=review.head_sha,
+            state=gate["state"],
+            context=gate["context"],
+            description=gate["description"],
+            installation_id=repo.github_installation_id,
+        )
+        passport.github_gate_state = gate["state"]
+        passport.github_gate_url = result.get("url")
+        passport.github_gate_posted_at = datetime.now(timezone.utc)
+        await session.flush()
+    except Exception as exc:
+        logger.error(
+            "GitHub passport gate publish failed for review %s: %s",
+            review.id,
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="GitHub API error while publishing the passport gate",
+        ) from exc
+
+    logger.info("Published passport gate %s for review %s", gate["state"], review.id)
+    return ReviewPassportGateResponse.model_validate(build_passport_gate(passport))
+
+
+@router.get(
+    "/{review_id}/passport/markdown",
+    response_model=ReviewPassportMarkdownResponse,
+)
+async def export_passport_markdown(
+    review_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewPassportMarkdownResponse:
+    """Return a Markdown Review Passport artifact for copying or export."""
+    review = await _get_review_for_passport(session, review_id, current_user)
+    passport = await get_review_passport(session, review_id, current_user.id)
+    if passport is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review passport not found",
+        )
+    return ReviewPassportMarkdownResponse(
+        body=build_passport_markdown(
+            passport,
+            pr_title=review.github_pr_title,
+            head_sha=review.head_sha,
+        )
+    )
+
+
+@router.post(
+    "/{review_id}/passport/post-comment",
+    response_model=PostCommentResponse,
+)
+async def post_passport_comment(
+    review_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PostCommentResponse:
+    """Post or update the Review Passport as a GitHub PR comment."""
+    review = await _get_review_for_passport(session, review_id, current_user)
+    passport = await get_review_passport(session, review_id, current_user.id)
+    if passport is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review passport not found",
+        )
+
+    repo = await session.get(Repository, review.repo_id)
+    if repo is None or repo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository not found for this review",
+        )
+    if repo.github_repo_url == "local://playground":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Local playground reviews cannot be posted to GitHub; copy Markdown instead",
+        )
+
+    github_client = get_github_client()
+    if github_client is None or repo.github_installation_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GitHub App is not configured; cannot post passport comment",
+        )
+
+    body = build_passport_markdown(
+        passport,
+        pr_title=review.github_pr_title,
+        head_sha=review.head_sha,
+    )
+
+    try:
+        if passport.github_comment_id:
+            await github_client.update_pr_comment(
+                owner=repo.github_repo_owner,
+                repo=repo.github_repo_name,
+                comment_id=passport.github_comment_id,
+                body=body,
+                installation_id=repo.github_installation_id,
+            )
+            comment_id = passport.github_comment_id
+            url = passport.github_comment_url or (
+                f"https://github.com/{repo.github_repo_owner}/{repo.github_repo_name}"
+                f"/issues/{review.github_pr_number}#issuecomment-{comment_id}"
+            )
+        else:
+            result = await github_client.post_pr_comment(
+                owner=repo.github_repo_owner,
+                repo=repo.github_repo_name,
+                pr_number=review.github_pr_number,
+                body=body,
+                installation_id=repo.github_installation_id,
+            )
+            comment_id = int(result["id"])
+            url = str(result["url"])
+            passport.github_comment_id = comment_id
+            passport.github_comment_url = url
+
+        posted_at = datetime.now(timezone.utc)
+        passport.github_comment_posted_at = posted_at
+        await session.flush()
+
+    except Exception as exc:
+        logger.error(
+            "GitHub passport comment post failed for review %s: %s",
+            review.id,
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="GitHub API error while posting the passport comment",
+        ) from exc
+
+    logger.info("Posted passport comment %s for review %s", comment_id, review.id)
+    return PostCommentResponse(comment_id=comment_id, url=url, posted_at=posted_at)
+
+
+@router.delete("/{review_id}/passport", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_passport(
+    review_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """Delete an existing Review Passport for an owned review."""
+    await _get_review_for_passport(session, review_id, current_user)
+    deleted = await delete_review_passport(session, review_id, current_user.id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review passport not found",
+        )
 
 
 @router.get("/{review_id}", response_model=ReviewResponse)

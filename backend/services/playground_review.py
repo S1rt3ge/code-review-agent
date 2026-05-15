@@ -6,6 +6,7 @@ It never calls external LLM providers and is intended for local onboarding.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
 from dataclasses import dataclass
@@ -16,13 +17,22 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.models.db_models import AgentExecution, Finding, Repository, Review, User
+from backend.models.db_models import (
+    AgentExecution,
+    Finding,
+    Repository,
+    Review,
+    ReviewInputSnapshot,
+    User,
+)
 
 PLAYGROUND_OWNER = "local"
 PLAYGROUND_REPO = "playground"
 PLAYGROUND_URL = "local://playground"
 LOCAL_MODEL_NAME = "local-playground"
 MAX_PLAYGROUND_DIFF_CHARS = 100_000
+MAX_SNAPSHOT_ADDED_LINES = 2_500
+MAX_SNAPSHOT_LINE_CHARS = 500
 
 DEMO_DIFF = """diff --git a/app/auth.py b/app/auth.py
 --- a/app/auth.py
@@ -226,6 +236,18 @@ async def create_playground_review(
     await session.flush()
 
     session.add_all(finding.to_orm(review_id) for finding in findings)
+    changed_files, added_lines = _build_diff_snapshot(normalized_diff)
+    session.add(
+        ReviewInputSnapshot(
+            id=uuid.uuid4(),
+            review_id=review_id,
+            user_id=current_user.id,
+            input_type="diff",
+            content_digest=hashlib.sha256(normalized_diff.encode("utf-8")).hexdigest(),
+            changed_files=changed_files,
+            added_lines=added_lines,
+        )
+    )
     session.add_all(
         AgentExecution(
             id=uuid.uuid4(),
@@ -322,6 +344,20 @@ def _parse_added_lines(code_diff: str) -> list[AddedLine]:
             current_line += 1
 
     return added
+
+
+def _build_diff_snapshot(code_diff: str) -> tuple[list[str], list[dict[str, object]]]:
+    added = _parse_added_lines(code_diff)
+    changed_files = sorted({line.file_path for line in added})
+    added_lines = [
+        {
+            "file_path": line.file_path,
+            "line_number": line.line_number,
+            "content": line.content.strip()[:MAX_SNAPSHOT_LINE_CHARS],
+        }
+        for line in added[:MAX_SNAPSHOT_ADDED_LINES]
+    ]
+    return changed_files, added_lines
 
 
 def _normalize_diff_file(path: str) -> str:
