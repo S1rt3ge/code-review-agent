@@ -9,6 +9,7 @@ AI-assisted code review platform for GitHub PRs and local pasted diffs. It shoul
 - `TECHNICAL_SPEC.md` - original architecture and system constraints.
 - `docs/LOCAL_REVIEW_PLAYGROUND_SPEC.md` - local demo and pasted-diff flow.
 - `docs/REVIEW_PASSPORT_SPEC.md` - Review Passport and Anti-AI-Slop Mode behavior.
+- `docs/REVIEW_PASSPORT_EXPORT_SPEC.md` - Review Passport Markdown export and PR comment behavior.
 - `docs/local-demo.md` - end-to-end local demo walkthrough.
 - `SPEC_TEMPLATE.md` - template for new feature specs.
 - `.claude/rules/*.md` - optional local Claude rules when present.
