@@ -53,7 +53,8 @@ class GitHubApiClient:
     """Async GitHub API client that authenticates via GitHub App.
 
     Call ``get_pr_files`` to fetch changed files for a PR and
-    ``post_pr_comment`` / ``update_pr_comment`` to manage comments.
+    ``post_pr_comment`` / ``update_pr_comment`` to manage comments, and
+    ``post_commit_status`` to publish merge gates.
     """
 
     # Shared token cache across instances (keyed by installation_id).
@@ -256,6 +257,51 @@ class GitHubApiClient:
             resp.raise_for_status()
 
         logger.info("Updated comment %d on %s/%s", comment_id, owner, repo)
+
+    # ------------------------------------------------------------------
+    # Commit statuses
+    # ------------------------------------------------------------------
+
+    async def post_commit_status(
+        self,
+        owner: str,
+        repo: str,
+        sha: str,
+        state: str,
+        context: str,
+        description: str,
+        installation_id: int,
+        target_url: str | None = None,
+    ) -> dict[str, int | str | None]:
+        """Post a GitHub commit status to a pull request head SHA."""
+        token = await self._get_installation_token(installation_id)
+        url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/statuses/{sha}"
+        payload = {
+            "state": state,
+            "context": context,
+            "description": description,
+        }
+        if target_url:
+            payload["target_url"] = target_url
+
+        async with httpx.AsyncClient(timeout=GITHUB_API_TIMEOUT) as client:
+            resp = await client.post(
+                url,
+                headers={
+                    "Authorization": f"token {token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+                json=payload,
+            )
+            resp.raise_for_status()
+
+        data: dict = resp.json()
+        logger.info("Posted status %s to %s/%s@%s", state, owner, repo, sha[:7])
+        return {
+            "id": data.get("id"),
+            "url": data.get("target_url") or data.get("url"),
+        }
 
 
 def get_github_client() -> GitHubApiClient | None:
