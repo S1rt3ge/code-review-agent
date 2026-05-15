@@ -28,6 +28,8 @@ from backend.models.schemas import (
     PostCommentResponse,
     PlaygroundDemoReviewRequest,
     PlaygroundDiffReviewRequest,
+    ReviewPassportRequest,
+    ReviewPassportResponse,
     ReviewListItem,
     ReviewListResponse,
     ReviewResponse,
@@ -36,6 +38,11 @@ from backend.services.analysis_queue import enqueue_analysis
 from backend.services.github_api import get_github_client
 from backend.services.playground_review import DEMO_DIFF, create_playground_review
 from backend.services.pr_commenter import build_comment
+from backend.services.review_passport import (
+    create_or_replace_review_passport,
+    delete_review_passport,
+    get_review_passport,
+)
 from backend.utils.auth import create_review_ws_ticket, get_current_user
 from backend.utils.database import get_db
 
@@ -67,6 +74,31 @@ def _validate_agents(agent_names: list[str]) -> list[str]:
             detail=f"Unknown agent names: {', '.join(invalid)}",
         )
     return normalized
+
+
+async def _get_review_for_passport(
+    session: AsyncSession,
+    review_id: uuid.UUID,
+    current_user: User,
+) -> Review:
+    """Load a review for passport operations with explicit ownership handling."""
+    result = await session.execute(
+        select(Review)
+        .where(Review.id == review_id)
+        .options(selectinload(Review.findings))
+    )
+    review = result.scalar_one_or_none()
+    if review is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review not found",
+        )
+    if review.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Review does not belong to the current user",
+        )
+    return review
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +276,76 @@ async def create_playground_diff_review(
 
     logger.info("Created local playground diff review %s", review.id)
     return ReviewResponse.model_validate(review)
+
+
+@router.post(
+    "/{review_id}/passport",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ReviewPassportResponse,
+)
+async def create_review_passport(
+    review_id: uuid.UUID,
+    payload: ReviewPassportRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewPassportResponse:
+    """Create or replace an evidence-backed passport for a review."""
+    review = await _get_review_for_passport(session, review_id, current_user)
+    try:
+        passport = await create_or_replace_review_passport(
+            session,
+            review=review,
+            current_user=current_user,
+            mode=payload.mode,
+            spec_source_type=payload.spec_source_type,
+            spec_source_ref=payload.spec_source_ref,
+            spec_input=payload.spec_input,
+            code_diff=payload.code_diff,
+        )
+    except OverflowError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return ReviewPassportResponse.model_validate(passport)
+
+
+@router.get("/{review_id}/passport", response_model=ReviewPassportResponse)
+async def get_passport(
+    review_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewPassportResponse:
+    """Return an existing Review Passport for an owned review."""
+    await _get_review_for_passport(session, review_id, current_user)
+    passport = await get_review_passport(session, review_id, current_user.id)
+    if passport is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review passport not found",
+        )
+    return ReviewPassportResponse.model_validate(passport)
+
+
+@router.delete("/{review_id}/passport", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_passport(
+    review_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """Delete an existing Review Passport for an owned review."""
+    await _get_review_for_passport(session, review_id, current_user)
+    deleted = await delete_review_passport(session, review_id, current_user.id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review passport not found",
+        )
 
 
 @router.get("/{review_id}", response_model=ReviewResponse)
