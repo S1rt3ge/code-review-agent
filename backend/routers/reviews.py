@@ -28,6 +28,7 @@ from backend.models.schemas import (
     PostCommentResponse,
     PlaygroundDemoReviewRequest,
     PlaygroundDiffReviewRequest,
+    ReviewPassportGateResponse,
     ReviewPassportMarkdownResponse,
     ReviewPassportRequest,
     ReviewPassportResponse,
@@ -45,6 +46,7 @@ from backend.services.review_passport import (
     delete_review_passport,
     get_review_passport,
 )
+from backend.services.review_passport_gate import build_passport_gate
 from backend.utils.auth import create_review_ws_ticket, get_current_user
 from backend.utils.database import get_db
 
@@ -332,6 +334,99 @@ async def get_passport(
             detail="Review passport not found",
         )
     return ReviewPassportResponse.model_validate(passport)
+
+
+@router.get(
+    "/{review_id}/passport/gate",
+    response_model=ReviewPassportGateResponse,
+)
+async def get_passport_gate(
+    review_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewPassportGateResponse:
+    """Return the merge gate state derived from an existing Review Passport."""
+    await _get_review_for_passport(session, review_id, current_user)
+    passport = await get_review_passport(session, review_id, current_user.id)
+    if passport is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review passport not found",
+        )
+    return ReviewPassportGateResponse.model_validate(build_passport_gate(passport))
+
+
+@router.post(
+    "/{review_id}/passport/gate/publish",
+    response_model=ReviewPassportGateResponse,
+)
+async def publish_passport_gate(
+    review_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewPassportGateResponse:
+    """Publish the Review Passport verdict as a GitHub commit status."""
+    review = await _get_review_for_passport(session, review_id, current_user)
+    passport = await get_review_passport(session, review_id, current_user.id)
+    if passport is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review passport not found",
+        )
+
+    repo = await session.get(Repository, review.repo_id)
+    if repo is None or repo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository not found for this review",
+        )
+    if repo.github_repo_url == "local://playground":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Local playground reviews cannot publish GitHub gate statuses",
+        )
+    if not review.head_sha:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Review head SHA is required to publish a GitHub gate status",
+        )
+
+    github_client = get_github_client()
+    if github_client is None or repo.github_installation_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GitHub App is not configured; cannot publish passport gate",
+        )
+
+    gate = build_passport_gate(passport)
+    try:
+        result = await github_client.post_commit_status(
+            owner=repo.github_repo_owner,
+            repo=repo.github_repo_name,
+            sha=review.head_sha,
+            state=gate["state"],
+            context=gate["context"],
+            description=gate["description"],
+            installation_id=repo.github_installation_id,
+        )
+        passport.github_gate_state = gate["state"]
+        passport.github_gate_url = result.get("url")
+        passport.github_gate_posted_at = datetime.now(timezone.utc)
+        await session.flush()
+    except Exception as exc:
+        logger.error(
+            "GitHub passport gate publish failed for review %s: %s",
+            review.id,
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="GitHub API error while publishing the passport gate",
+        ) from exc
+
+    logger.info("Published passport gate %s for review %s", gate["state"], review.id)
+    return ReviewPassportGateResponse.model_validate(build_passport_gate(passport))
 
 
 @router.get(

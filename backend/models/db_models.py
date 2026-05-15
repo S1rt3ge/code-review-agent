@@ -412,6 +412,12 @@ class ReviewPassport(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    github_gate_state: Mapped[str | None] = mapped_column(Text, nullable=True)
+    github_gate_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    github_gate_posted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -448,11 +448,27 @@ class ReviewPassportResponse(BaseModel):
     github_comment_id: int | None = None
     github_comment_url: str | None = None
     github_comment_posted_at: datetime | None = None
+    github_gate_state: str | None = None
+    github_gate_url: str | None = None
+    github_gate_posted_at: datetime | None = None
     generated_at: datetime
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ReviewPassportGateResponse(BaseModel):
+    """GitHub merge gate state derived from a Review Passport verdict."""
+
+    context: str
+    verdict: str
+    state: str
+    description: str
+    required_action: str
+    github_gate_state: str | None = None
+    github_gate_url: str | None = None
+    github_gate_posted_at: datetime | None = None
 
 
 class ReviewPassportMarkdownResponse(BaseModel):

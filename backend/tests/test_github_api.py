@@ -5,6 +5,7 @@ Covers:
     GitHubApiClient._get_installation_token: caching + refresh
     GitHubApiClient.get_pr_files: pagination logic
     GitHubApiClient.post_pr_comment: response parsing
+    GitHubApiClient.post_commit_status: commit status publishing
     GitHubApiClient.update_pr_comment: PATCH call
     get_github_client: factory None-guard
 """
@@ -232,6 +233,54 @@ async def test_update_pr_comment_sends_patch(client):
     mock_http.patch.assert_called_once()
     call_kwargs = mock_http.patch.call_args
     assert call_kwargs.kwargs["json"] == {"body": "new body"}
+
+
+# ---------------------------------------------------------------------------
+# post_commit_status
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_post_commit_status_sends_context_payload(client):
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "id": 321,
+        "url": "https://api.github.com/repos/owner/repo/statuses/abcdef",
+    }
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_http = AsyncMock()
+    mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+    mock_http.__aexit__ = AsyncMock(return_value=False)
+    mock_http.post = AsyncMock(return_value=mock_resp)
+
+    with patch("backend.services.github_api.httpx.AsyncClient", return_value=mock_http):
+        with patch.object(
+            client, "_get_installation_token", AsyncMock(return_value="tok")
+        ):
+            result = await client.post_commit_status(
+                owner="owner",
+                repo="repo",
+                sha="abcdef",
+                state="failure",
+                context="AI Review Passport Gate",
+                description="Review Passport BLOCKED: missing required evidence.",
+                installation_id=42,
+                target_url="https://app.local/reviews/1",
+            )
+
+    assert result == {
+        "id": 321,
+        "url": "https://api.github.com/repos/owner/repo/statuses/abcdef",
+    }
+    call = mock_http.post.call_args
+    assert call.args[0].endswith("/repos/owner/repo/statuses/abcdef")
+    assert call.kwargs["json"] == {
+        "state": "failure",
+        "context": "AI Review Passport Gate",
+        "description": "Review Passport BLOCKED: missing required evidence.",
+        "target_url": "https://app.local/reviews/1",
+    }
 
 
 # ---------------------------------------------------------------------------
