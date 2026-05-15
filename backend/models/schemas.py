@@ -445,11 +445,20 @@ class ReviewPassportResponse(BaseModel):
     anti_slop_signals: list[dict[str, Any]] = Field(default_factory=list)
     qa_steps: list[dict[str, Any]] = Field(default_factory=list)
     missing_evidence: list[dict[str, Any]] = Field(default_factory=list)
+    github_comment_id: int | None = None
+    github_comment_url: str | None = None
+    github_comment_posted_at: datetime | None = None
     generated_at: datetime
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ReviewPassportMarkdownResponse(BaseModel):
+    """Markdown export body for a Review Passport."""
+
+    body: str
 
 
 # ---------------------------------------------------------------------------

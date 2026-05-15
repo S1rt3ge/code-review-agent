@@ -28,6 +28,7 @@ from backend.models.schemas import (
     PostCommentResponse,
     PlaygroundDemoReviewRequest,
     PlaygroundDiffReviewRequest,
+    ReviewPassportMarkdownResponse,
     ReviewPassportRequest,
     ReviewPassportResponse,
     ReviewListItem,
@@ -38,6 +39,7 @@ from backend.services.analysis_queue import enqueue_analysis
 from backend.services.github_api import get_github_client
 from backend.services.playground_review import DEMO_DIFF, create_playground_review
 from backend.services.pr_commenter import build_comment
+from backend.services.review_passport_commenter import build_passport_markdown
 from backend.services.review_passport import (
     create_or_replace_review_passport,
     delete_review_passport,
@@ -330,6 +332,122 @@ async def get_passport(
             detail="Review passport not found",
         )
     return ReviewPassportResponse.model_validate(passport)
+
+
+@router.get(
+    "/{review_id}/passport/markdown",
+    response_model=ReviewPassportMarkdownResponse,
+)
+async def export_passport_markdown(
+    review_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewPassportMarkdownResponse:
+    """Return a Markdown Review Passport artifact for copying or export."""
+    review = await _get_review_for_passport(session, review_id, current_user)
+    passport = await get_review_passport(session, review_id, current_user.id)
+    if passport is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review passport not found",
+        )
+    return ReviewPassportMarkdownResponse(
+        body=build_passport_markdown(
+            passport,
+            pr_title=review.github_pr_title,
+            head_sha=review.head_sha,
+        )
+    )
+
+
+@router.post(
+    "/{review_id}/passport/post-comment",
+    response_model=PostCommentResponse,
+)
+async def post_passport_comment(
+    review_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PostCommentResponse:
+    """Post or update the Review Passport as a GitHub PR comment."""
+    review = await _get_review_for_passport(session, review_id, current_user)
+    passport = await get_review_passport(session, review_id, current_user.id)
+    if passport is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review passport not found",
+        )
+
+    repo = await session.get(Repository, review.repo_id)
+    if repo is None or repo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository not found for this review",
+        )
+    if repo.github_repo_url == "local://playground":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Local playground reviews cannot be posted to GitHub; copy Markdown instead",
+        )
+
+    github_client = get_github_client()
+    if github_client is None or repo.github_installation_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GitHub App is not configured; cannot post passport comment",
+        )
+
+    body = build_passport_markdown(
+        passport,
+        pr_title=review.github_pr_title,
+        head_sha=review.head_sha,
+    )
+
+    try:
+        if passport.github_comment_id:
+            await github_client.update_pr_comment(
+                owner=repo.github_repo_owner,
+                repo=repo.github_repo_name,
+                comment_id=passport.github_comment_id,
+                body=body,
+                installation_id=repo.github_installation_id,
+            )
+            comment_id = passport.github_comment_id
+            url = passport.github_comment_url or (
+                f"https://github.com/{repo.github_repo_owner}/{repo.github_repo_name}"
+                f"/issues/{review.github_pr_number}#issuecomment-{comment_id}"
+            )
+        else:
+            result = await github_client.post_pr_comment(
+                owner=repo.github_repo_owner,
+                repo=repo.github_repo_name,
+                pr_number=review.github_pr_number,
+                body=body,
+                installation_id=repo.github_installation_id,
+            )
+            comment_id = int(result["id"])
+            url = str(result["url"])
+            passport.github_comment_id = comment_id
+            passport.github_comment_url = url
+
+        posted_at = datetime.now(timezone.utc)
+        passport.github_comment_posted_at = posted_at
+        await session.flush()
+
+    except Exception as exc:
+        logger.error(
+            "GitHub passport comment post failed for review %s: %s",
+            review.id,
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="GitHub API error while posting the passport comment",
+        ) from exc
+
+    logger.info("Posted passport comment %s for review %s", comment_id, review.id)
+    return PostCommentResponse(comment_id=comment_id, url=url, posted_at=posted_at)
 
 
 @router.delete("/{review_id}/passport", status_code=status.HTTP_204_NO_CONTENT)

@@ -55,6 +55,12 @@ This is intentional. The demo diff contains risky code so the passport proves th
 
 The pasted-diff path is the fastest way to test the product against real local work without wiring GitHub webhooks.
 
+## Share The Passport
+
+Use `Copy Markdown` in the Review Passport panel to copy a portable report with verdict, criteria coverage, anti-slop signals, and QA steps.
+
+For local playground reviews, GitHub posting is intentionally unavailable because the review is backed by `local://playground`. For GitHub-backed reviews with a configured GitHub App installation, `Post to PR` creates or updates a dedicated Review Passport comment on the pull request.
+
 ## Stop The Stack
 
 ```bash

@@ -83,6 +83,9 @@ const PASSPORT_RESPONSE = {
     },
   ],
   missing_evidence: [],
+  github_comment_id: null,
+  github_comment_url: null,
+  github_comment_posted_at: null,
   generated_at: '2026-04-27T10:02:00Z',
   created_at: '2026-04-27T10:02:00Z',
   updated_at: '2026-04-27T10:02:00Z',
@@ -214,7 +217,7 @@ describe('ReviewDetail page', () => {
 
     await screen.findByText('Ready with risks')
 
-    await user.click(screen.getByRole('button', { name: /copy/i }))
+    await user.click(screen.getByRole('button', { name: /copy qa/i }))
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('docker compose up --build'))
     expect(screen.getByText('QA script copied.')).toBeInTheDocument()
 
@@ -226,5 +229,40 @@ describe('ReviewDetail page', () => {
 
     const [, requestOptions] = fetch.mock.calls[2]
     expect(requestOptions.method).toBe('DELETE')
+  })
+
+  it('copies passport markdown and posts the passport to a PR', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify(REVIEW_RESPONSE), { status: 200 }))
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify(PASSPORT_RESPONSE), { status: 200 }))
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({ body: '## Review Passport\nREADY_WITH_RISKS' }), { status: 200 }))
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({
+      comment_id: 456,
+      url: 'https://github.com/test/repo/issues/42#issuecomment-456',
+      posted_at: '2026-04-27T10:05:00Z',
+    }), { status: 200 }))
+
+    renderReviewDetail()
+
+    await screen.findByText('Ready with risks')
+
+    await user.click(screen.getByRole('button', { name: /copy markdown/i }))
+    expect(writeText).toHaveBeenCalledWith('## Review Passport\nREADY_WITH_RISKS')
+    expect(screen.getByText('Markdown copied.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /post to pr/i }))
+    expect(await screen.findByText(/Passport posted to PR/i)).toBeInTheDocument()
+
+    const [, markdownRequest] = fetch.mock.calls[2]
+    const [, postRequest] = fetch.mock.calls[3]
+    expect(markdownRequest.method).toBe('GET')
+    expect(postRequest.method).toBe('POST')
+    expect(fetch.mock.calls[2][0]).toContain('/reviews/review-1/passport/markdown')
+    expect(fetch.mock.calls[3][0]).toContain('/reviews/review-1/passport/post-comment')
   })
 })
