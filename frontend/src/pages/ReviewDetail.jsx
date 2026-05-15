@@ -140,11 +140,13 @@ function AboutReviewPanel({ agents, lmUsed }) {
  * @param {{
  *   passport: any,
  *   onGenerate: (payload: any) => Promise<void>,
- *   onDelete: () => Promise<void>
+ *   onDelete: () => Promise<void>,
+ *   onCopyMarkdown: () => Promise<string>,
+ *   onPostToPr: () => Promise<any>
  * }} props
  * @returns {React.ReactElement}
  */
-function ReviewPassportPanel({ passport, onGenerate, onDelete }) {
+function ReviewPassportPanel({ passport, onGenerate, onDelete, onCopyMarkdown, onPostToPr }) {
   const [mode, setMode] = useState('combined')
   const [specRef, setSpecRef] = useState('')
   const [specInput, setSpecInput] = useState('')
@@ -206,6 +208,39 @@ function ReviewPassportPanel({ passport, onGenerate, onDelete }) {
       .join('\n\n')
     await navigator.clipboard.writeText(text)
     setCopyMessage('QA script copied.')
+  }
+
+  const handleCopyMarkdown = async () => {
+    setError(null)
+    setCopyMessage(null)
+    if (!navigator.clipboard) {
+      setError('Clipboard is unavailable in this browser.')
+      return
+    }
+    setBusy(true)
+    try {
+      const body = await onCopyMarkdown()
+      await navigator.clipboard.writeText(body)
+      setCopyMessage('Markdown copied.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to copy Markdown')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handlePostToPr = async () => {
+    setError(null)
+    setCopyMessage(null)
+    setBusy(true)
+    try {
+      await onPostToPr()
+      setCopyMessage('Passport posted to PR.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to post passport to PR')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const verdictClass = PASSPORT_VERDICT_CLASSES[passport?.verdict] ?? PASSPORT_VERDICT_CLASSES.READY_WITH_RISKS
@@ -285,7 +320,7 @@ function ReviewPassportPanel({ passport, onGenerate, onDelete }) {
                   onClick={handleCopyQa}
                   className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
                 >
-                  Copy
+                  Copy QA
                 </button>
               </div>
               <ol className="space-y-2">
@@ -300,7 +335,23 @@ function ReviewPassportPanel({ passport, onGenerate, onDelete }) {
             </div>
           )}
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleCopyMarkdown}
+              disabled={busy}
+              className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+            >
+              Copy Markdown
+            </button>
+            <button
+              type="button"
+              onClick={handlePostToPr}
+              disabled={busy}
+              className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+            >
+              Post to PR
+            </button>
             <button
               type="button"
               onClick={handleDelete}
@@ -310,6 +361,16 @@ function ReviewPassportPanel({ passport, onGenerate, onDelete }) {
               Delete passport
             </button>
             {copyMessage && <span className="text-xs text-green-600 dark:text-green-400">{copyMessage}</span>}
+            {passport.github_comment_url && (
+              <a
+                href={passport.github_comment_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                View PR comment
+              </a>
+            )}
           </div>
         </div>
       ) : (
@@ -478,6 +539,24 @@ export function ReviewDetail() {
     await delApi(`/reviews/${id}/passport`)
     setPassport(null)
   }, [delApi, id])
+
+  const handleCopyPassportMarkdown = useCallback(async () => {
+    const data = await get(`/reviews/${id}/passport/markdown`)
+    return data.body
+  }, [get, id])
+
+  const handlePostPassportToPr = useCallback(async () => {
+    const data = await post(`/reviews/${id}/passport/post-comment`, {})
+    setPassport(current => current
+      ? {
+          ...current,
+          github_comment_id: data.comment_id,
+          github_comment_url: data.url,
+          github_comment_posted_at: data.posted_at,
+        }
+      : current)
+    return data
+  }, [post, id])
 
   // Merge DB agent executions with live WS statuses
   const selectedAgents = review?.selected_agents?.length ? review.selected_agents : KNOWN_AGENTS
@@ -669,6 +748,8 @@ export function ReviewDetail() {
             passport={passport}
             onGenerate={handleGeneratePassport}
             onDelete={handleDeletePassport}
+            onCopyMarkdown={handleCopyPassportMarkdown}
+            onPostToPr={handlePostPassportToPr}
           />
         </div>
 
