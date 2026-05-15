@@ -406,6 +406,12 @@ class ReviewPassport(Base):
     anti_slop_signals: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
     qa_steps: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
     missing_evidence: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    github_comment_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    github_comment_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    github_comment_posted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
