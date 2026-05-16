@@ -7,6 +7,10 @@ connect to PostgreSQL reliably.
 
 from __future__ import annotations
 
+import asyncio
+import sys
+from collections.abc import Callable
+
 from backend.utils.event_loop import configure_windows_selector_event_loop_policy
 
 configure_windows_selector_event_loop_policy()
@@ -16,12 +20,20 @@ import uvicorn  # noqa: E402
 from backend.config import settings  # noqa: E402
 
 
+def get_uvicorn_loop_factory() -> str | Callable[[], asyncio.AbstractEventLoop]:
+    """Return a psycopg-compatible uvicorn loop setting for local runs."""
+    if sys.platform == "win32":
+        return asyncio.SelectorEventLoop
+    return "auto"
+
+
 def main() -> None:
     """Start the FastAPI backend with project-safe defaults."""
     uvicorn.run(
         "backend.main:app",
         host=settings.app_host,
         port=settings.app_port,
+        loop=get_uvicorn_loop_factory(),
     )
 
 
