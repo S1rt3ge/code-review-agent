@@ -306,7 +306,7 @@ Docker defaults to `AUTH_REQUIRE_EMAIL_VERIFICATION=false`, so local accounts ca
 sign in immediately after registration. Set `AUTH_REQUIRE_EMAIL_VERIFICATION=true`
 to test the production-style verification flow.
 
-### 30-second local demo
+### Run the local demo in 5 minutes
 
 After Docker starts, open `http://localhost:5173`, create an account, and click
 `Try demo review` on the dashboard. This creates a completed review using the
