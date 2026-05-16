@@ -31,6 +31,14 @@ import { StatusBadge } from '@/components/StatusBadge.jsx'
  * @property {string} github_repo_name
  */
 
+/**
+ * @typedef {Object} SetupStatus
+ * @property {boolean} repositoriesConfigured
+ * @property {boolean} llmConfigured
+ * @property {boolean} loading
+ * @property {string|null} error
+ */
+
 // ---------------------------------------------------------------------------
 // Stat card
 // ---------------------------------------------------------------------------
@@ -581,6 +589,144 @@ function formatRelativeTime(isoDate) {
   return `${Math.floor(hours / 24)}d ago`
 }
 
+/**
+ * @param {unknown} repositoriesResponse
+ * @returns {Repository[]}
+ */
+function parseRepositories(repositoriesResponse) {
+  if (Array.isArray(repositoriesResponse)) return repositoriesResponse
+  if (
+    repositoriesResponse &&
+    typeof repositoriesResponse === 'object' &&
+    Array.isArray(repositoriesResponse.repositories)
+  ) {
+    return repositoriesResponse.repositories
+  }
+  return []
+}
+
+/**
+ * @param {{ complete: boolean, index: number }} props
+ * @returns {React.ReactElement}
+ */
+function SetupStepMarker({ complete, index }) {
+  const markerClass = complete
+    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+
+  return (
+    <div className={`flex-shrink-0 w-7 h-7 rounded-full ${markerClass} flex items-center justify-center text-sm font-bold`}>
+      {complete ? (
+        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path
+            d="M5 10.5l3 3 7-7"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : (
+        index
+      )}
+    </div>
+  )
+}
+
+/**
+ * @param {{ step: { label: string, description: React.ReactNode, complete: boolean }, index: number }} props
+ * @returns {React.ReactElement}
+ */
+function SetupStep({ step, index }) {
+  return (
+    <div className="px-6 py-5 flex gap-4">
+      <SetupStepMarker complete={step.complete} index={index} />
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{step.label}</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          {step.description}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * @param {{ stats: DashboardStats|null, setupStatus: SetupStatus }} props
+ * @returns {React.ReactElement}
+ */
+function FirstRunChecklist({ stats, setupStatus }) {
+  const hasFirstReview = Number(stats?.total_reviews ?? 0) > 0
+  const steps = [
+    {
+      label: 'Account ready',
+      complete: true,
+      description: 'You are signed in and can create local reviews.',
+    },
+    {
+      label: setupStatus.repositoriesConfigured ? 'Repository connected' : 'Connect a repository',
+      complete: setupStatus.repositoriesConfigured,
+      description: setupStatus.repositoriesConfigured ? (
+        'A GitHub repository is connected for pull request reviews.'
+      ) : (
+        <>
+          Connect a GitHub repository from{' '}
+          <Link to="/repositories" className="text-blue-600 dark:text-blue-400 hover:underline">
+            Repositories
+          </Link>
+          {' '}when you are ready for PR automation.
+        </>
+      ),
+    },
+    {
+      label: setupStatus.llmConfigured ? 'LLM provider ready' : 'Configure an LLM provider',
+      complete: setupStatus.llmConfigured,
+      description: setupStatus.llmConfigured ? (
+        'Claude, GPT, or local Ollama is available for review analysis.'
+      ) : (
+        <>
+          Add Claude, GPT, or local Ollama in{' '}
+          <Link to="/settings" className="text-blue-600 dark:text-blue-400 hover:underline">
+            Settings
+          </Link>
+          {' '}for full analysis.
+        </>
+      ),
+    },
+    {
+      label: hasFirstReview ? 'First review complete' : 'Run your first review',
+      complete: hasFirstReview,
+      description: hasFirstReview
+        ? 'Your dashboard will show new review activity here.'
+        : 'Use the demo review or paste a diff to see findings without GitHub setup.',
+    },
+  ]
+  const completedCount = steps.filter(step => step.complete).length
+
+  return (
+    <div>
+      <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/60 border-b border-gray-100 dark:border-gray-700 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Setup progress</h2>
+          {setupStatus.error && (
+            <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+              Setup progress is temporarily unavailable. You can still start a local review.
+            </p>
+          )}
+        </div>
+        <span className="text-xs font-semibold text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full px-3 py-1 self-start sm:self-auto">
+          {setupStatus.loading ? 'Checking setup' : `${completedCount}/4 complete`}
+        </span>
+      </div>
+      <div className="divide-y divide-gray-100 dark:divide-gray-700">
+        {steps.map((step, index) => (
+          <SetupStep key={step.label} step={step} index={index + 1} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Dashboard page
 // ---------------------------------------------------------------------------
@@ -604,8 +750,16 @@ export function Dashboard() {
   const [modalMode, setModalMode] = useState(/** @type {'pr'|'diff'} */ ('pr'))
   const [playgroundLoading, setPlaygroundLoading] = useState(false)
   const [playgroundError, setPlaygroundError] = useState(null)
+  /** @type {[SetupStatus, function]} */
+  const [setupStatus, setSetupStatus] = useState({
+    repositoriesConfigured: false,
+    llmConfigured: false,
+    loading: false,
+    error: null,
+  })
 
   const { get, post } = useApi()
+  const showFirstRunOnboarding = !reviewsLoading && !reviewsError && reviews.length === 0 && statusFilter === ''
 
   const fetchStats = useCallback(async () => {
     setStatsLoading(true)
@@ -638,6 +792,47 @@ export function Dashboard() {
     fetchStats()
     fetchReviews(statusFilter)
   }, [fetchStats, fetchReviews]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!showFirstRunOnboarding) return undefined
+
+    let cancelled = false
+
+    async function fetchSetupStatus() {
+      setSetupStatus(current => ({ ...current, loading: true, error: null }))
+      try {
+        const repositoriesData = await get('/repositories')
+        const settingsData = await get('/settings')
+        if (cancelled) return
+
+        const repositories = parseRepositories(repositoriesData)
+        setSetupStatus({
+          repositoriesConfigured: repositories.length > 0,
+          llmConfigured: Boolean(
+            settingsData?.api_key_claude_set ||
+            settingsData?.api_key_gpt_set ||
+            settingsData?.ollama_enabled
+          ),
+          loading: false,
+          error: null,
+        })
+      } catch (err) {
+        if (cancelled) return
+        setSetupStatus({
+          repositoriesConfigured: false,
+          llmConfigured: false,
+          loading: false,
+          error: err instanceof Error ? err.message : 'Failed to load setup status',
+        })
+      }
+    }
+
+    fetchSetupStatus()
+
+    return () => {
+      cancelled = true
+    }
+  }, [showFirstRunOnboarding, get])
 
   /**
    * Handle status filter change: update state and refetch.
@@ -757,41 +952,7 @@ export function Dashboard() {
             )}
           </div>
 
-          <div className="divide-y divide-gray-100 dark:divide-gray-700">
-            <div className="px-6 py-5 flex gap-4">
-              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">1</div>
-              <div>
-                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Configure an LLM provider</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                  Go to{' '}
-                  <Link to="/settings" className="text-blue-600 dark:text-blue-400 hover:underline">Settings</Link>
-                  {' '}and add an API key for Claude or GPT, or set up a local Ollama instance.
-                </p>
-              </div>
-            </div>
-            <div className="px-6 py-5 flex gap-4">
-              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">2</div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Add your repository</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                  Go to the{' '}
-                  <Link to="/repositories" className="text-blue-600 dark:text-blue-400 hover:underline">
-                    Add your repository
-                  </Link>
-                  {' '}page to connect a GitHub repo and get the webhook URL to configure in GitHub.
-                </p>
-              </div>
-            </div>
-            <div className="px-6 py-5 flex gap-4">
-              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">3</div>
-              <div>
-                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Open a Pull Request</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                  Create or update a PR in the connected repository. The agent will automatically analyze it and post a comment with findings.
-                </p>
-              </div>
-            </div>
-          </div>
+          <FirstRunChecklist stats={stats} setupStatus={setupStatus} />
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
