@@ -24,6 +24,7 @@ This project was built as an end-to-end engineering exercise in backend architec
 - Local Review Playground for demo and pasted-diff reviews without GitHub or paid AI providers
 - Review Passport with acceptance-criteria coverage, anti-slop signals, and merge-readiness verdicts
 - Deterministic review quality evals for local regression checks
+- Review DNA CLI for generating repo-specific AI review instructions and quality gates
 - GitHub webhook / PR comment integration
 - Production hardening across auth, CI, release gating, dependency hygiene, and governance
 
@@ -342,6 +343,19 @@ python scripts/evaluate_review_quality.py --json
 The eval runner grades the deterministic Local Review Playground analyzer against
 fixture cases in `evals/review_quality_cases.json`. It reports case pass rate,
 expected finding recall, unexpected findings, and an overall score.
+
+### Review DNA
+
+```bash
+python scripts/review_dna.py scan --json
+python scripts/review_dna.py init
+python scripts/review_dna.py instructions
+```
+
+Review DNA scans the repository for specs, evals, governance docs, local-first
+constraints, and quality gates. It can write `review-dna.yml` and render
+reviewer-ready Markdown so AI review tools use this project's actual standards
+instead of generic feedback.
 
 ### Frontend
 
