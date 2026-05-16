@@ -7,6 +7,17 @@ The format is inspired by Keep a Changelog and follows semantic-style sections.
 ## [Unreleased]
 
 ### Added
+- Productized self-hosted demo release scope:
+  - Local Review Playground demo reviews and pasted-diff reviews without GitHub,
+    SMTP, hosted LLM keys, or paid infrastructure.
+  - First-run dashboard onboarding with setup progress for account,
+    repositories, LLM provider status, and first review creation.
+  - Repository setup polish with skeleton loading, retryable error state, and
+    mobile-friendly connected repository cards.
+  - Review Passport generation with acceptance-criteria coverage,
+    anti-AI-slop signals, manual QA steps, Markdown export, PR comment posting,
+    and optional GitHub commit-status gate publishing.
+  - Deterministic review quality eval harness for local regression checks.
 - Release process baseline docs and workflow:
   - `docs/release-checklist.md`
   - `.github/workflows/release.yml`
@@ -16,6 +27,13 @@ The format is inspired by Keep a Changelog and follows semantic-style sections.
   - `docs/webhook-tunnel.md`
   - `docs/ollama-setup.md`
   - `docs/v0.2-roadmap.md`
+
+### Changed
+- Local Docker/demo setup can disable email verification with
+  `AUTH_REQUIRE_EMAIL_VERIFICATION=false`, keeping registration and login usable
+  without a paid SMTP provider.
+- Settings and repository setup copy now emphasize BYOK/local Ollama and free
+  webhook tunnel options for self-hosted evaluation.
 
 ## [2026-04-16]
 
