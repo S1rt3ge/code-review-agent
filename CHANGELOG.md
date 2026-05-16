@@ -10,6 +10,12 @@ The format is inspired by Keep a Changelog and follows semantic-style sections.
 - Release process baseline docs and workflow:
   - `docs/release-checklist.md`
   - `.github/workflows/release.yml`
+- Productized self-hosted demo documentation:
+  - README quick path for running the local demo in 5 minutes.
+  - `docs/local-demo.md`
+  - `docs/webhook-tunnel.md`
+  - `docs/ollama-setup.md`
+  - `docs/v0.2-roadmap.md`
 
 ## [2026-04-16]
 
