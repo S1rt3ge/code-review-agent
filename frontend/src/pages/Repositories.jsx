@@ -27,6 +27,22 @@ function formatDate(isoDate) {
 }
 
 /**
+ * @param {Repository} repo
+ * @returns {string}
+ */
+function getRepoFullName(repo) {
+  return `${repo.github_repo_owner}/${repo.github_repo_name}`
+}
+
+/**
+ * @param {Repository} repo
+ * @returns {string}
+ */
+function getRepoUrl(repo) {
+  return repo.github_repo_url || `https://github.com/${getRepoFullName(repo)}`
+}
+
+/**
  * Copyable inline code block.
  * @param {{ value: string, label?: string }} props
  * @returns {React.ReactElement}
@@ -142,6 +158,69 @@ function WebhookInfoPanel() {
 }
 
 /**
+ * Loading skeleton for the connected repositories list.
+ * @returns {React.ReactElement}
+ */
+function RepositoryListSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Loading repositories"
+      className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
+    >
+      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+        <div className="h-4 w-48 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+      </div>
+      <div className="divide-y divide-gray-100 dark:divide-gray-800">
+        {[0, 1, 2].map(item => (
+          <div key={item} className="p-4 animate-pulse">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-2">
+                <div className="h-4 w-44 rounded bg-gray-200 dark:bg-gray-700" />
+                <div className="h-3 w-28 rounded bg-gray-100 dark:bg-gray-700" />
+              </div>
+              <div className="flex gap-2">
+                <div className="h-7 w-16 rounded border border-gray-200 dark:border-gray-700" />
+                <div className="h-7 w-20 rounded border border-gray-200 dark:border-gray-700" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Fetch failure state with a local retry action.
+ * @param {{ error: string, onRetry: () => void }} props
+ * @returns {React.ReactElement}
+ */
+function RepositoryLoadError({ error, onRetry }) {
+  return (
+    <div className="rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-red-800 dark:text-red-300">
+            Repositories could not load
+          </p>
+          <p className="mt-1 text-sm text-red-700 dark:text-red-400">
+            {error}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="self-start px-3 py-1.5 rounded-md bg-white dark:bg-red-900 border border-red-200 dark:border-red-700 text-sm font-medium text-red-700 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-800 transition-colors"
+        >
+          Try again
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
  * Inline form to add a new repository.
  * @param {{ onAdded: () => void }} props
  * @returns {React.ReactElement}
@@ -213,7 +292,7 @@ function AddRepoForm({ onAdded }) {
         <button
           type="submit"
           disabled={submitting}
-          className="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white transition-colors shrink-0"
+          className="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white transition-colors shrink-0"
         >
           {submitting ? 'Adding...' : 'Add'}
         </button>
@@ -226,16 +305,24 @@ function AddRepoForm({ onAdded }) {
 }
 
 /**
- * Single row in the repositories table.
- * @param {{ repo: Repository, onRefresh: () => void }} props
- * @returns {React.ReactElement}
+ * Shared repository mutation handlers for row and card layouts.
+ * @param {Repository} repo
+ * @param {() => void} onRefresh
+ * @returns {{
+ *   toggling: boolean,
+ *   deleting: boolean,
+ *   rowError: string|null,
+ *   handleToggle: () => Promise<void>,
+ *   handleDelete: () => Promise<void>
+ * }}
  */
-function RepoRow({ repo, onRefresh }) {
+function useRepositoryActions(repo, onRefresh) {
   const [toggling, setToggling] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [rowError, setRowError] = useState(null)
 
   const { patch, del } = useApi()
+  const repoFullName = getRepoFullName(repo)
 
   /**
    * Toggle the enabled state of this repository.
@@ -259,7 +346,7 @@ function RepoRow({ repo, onRefresh }) {
    * @returns {Promise<void>}
    */
   async function handleDelete() {
-    if (!window.confirm(`Remove ${repo.github_repo_owner}/${repo.github_repo_name}? This cannot be undone.`)) return
+    if (!window.confirm(`Remove ${repoFullName}? This cannot be undone.`)) return
     setDeleting(true)
     setRowError(null)
     try {
@@ -272,8 +359,18 @@ function RepoRow({ repo, onRefresh }) {
     }
   }
 
-  const repoFullName = `${repo.github_repo_owner}/${repo.github_repo_name}`
-  const repoUrl = repo.github_repo_url || `https://github.com/${repoFullName}`
+  return { toggling, deleting, rowError, handleToggle, handleDelete }
+}
+
+/**
+ * Single row in the repositories table.
+ * @param {{ repo: Repository, onRefresh: () => void }} props
+ * @returns {React.ReactElement}
+ */
+function RepoRow({ repo, onRefresh }) {
+  const { toggling, deleting, rowError, handleToggle, handleDelete } = useRepositoryActions(repo, onRefresh)
+  const repoFullName = getRepoFullName(repo)
+  const repoUrl = getRepoUrl(repo)
 
   return (
     <tr className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
@@ -334,6 +431,80 @@ function RepoRow({ repo, onRefresh }) {
 }
 
 /**
+ * Mobile-friendly connected repository card.
+ * @param {{ repo: Repository, onRefresh: () => void }} props
+ * @returns {React.ReactElement}
+ */
+function RepoCard({ repo, onRefresh }) {
+  const { toggling, deleting, rowError, handleToggle, handleDelete } = useRepositoryActions(repo, onRefresh)
+  const repoFullName = getRepoFullName(repo)
+  const repoUrl = getRepoUrl(repo)
+
+  return (
+    <article className="p-4">
+      <div className="flex items-start justify-between gap-3">
+        <a
+          href={repoUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="min-w-0 break-all font-medium text-blue-600 dark:text-blue-400 hover:underline font-mono text-sm"
+        >
+          {repoFullName}
+        </a>
+        {repo.enabled ? (
+          <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
+            Enabled
+          </span>
+        ) : (
+          <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+            Disabled
+          </span>
+        )}
+      </div>
+
+      <dl className="mt-4 grid grid-cols-1 gap-3 text-sm">
+        <div className="flex items-center justify-between gap-4">
+          <dt className="text-gray-500 dark:text-gray-400">Installation ID</dt>
+          <dd className="font-mono text-gray-800 dark:text-gray-200">
+            {repo.github_installation_id ?? <span className="font-sans text-gray-400 dark:text-gray-500">Not installed</span>}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <dt className="text-gray-500 dark:text-gray-400">Added</dt>
+          <dd className="text-gray-800 dark:text-gray-200">{formatDate(repo.created_at)}</dd>
+        </div>
+      </dl>
+
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <button
+          type="button"
+          onClick={handleToggle}
+          disabled={toggling}
+          aria-label={`${repo.enabled ? 'Disable' : 'Enable'} ${repoFullName}`}
+          className="w-full sm:w-auto text-xs px-3 py-2 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-500 hover:text-blue-600 dark:hover:border-blue-400 dark:hover:text-blue-400 disabled:opacity-50 transition-colors"
+        >
+          {toggling ? 'Updating...' : repo.enabled ? 'Disable' : 'Enable'}
+        </button>
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={deleting}
+          aria-label={`Remove ${repoFullName}`}
+          className="w-full sm:w-auto text-xs px-3 py-2 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-red-500 hover:text-red-600 dark:hover:border-red-400 dark:hover:text-red-400 disabled:opacity-50 transition-colors"
+        >
+          {deleting ? 'Removing...' : 'Remove'}
+        </button>
+      </div>
+      {rowError && (
+        <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+          {rowError}
+        </p>
+      )}
+    </article>
+  )
+}
+
+/**
  * Repositories management page.
  * Allows users to list, add, toggle, and remove connected GitHub repositories.
  * @returns {React.ReactElement}
@@ -378,16 +549,9 @@ export function Repositories() {
 
       {/* Repository list */}
       {loading ? (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 flex justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm text-gray-500 dark:text-gray-400">Loading repositories...</span>
-          </div>
-        </div>
+        <RepositoryListSkeleton />
       ) : fetchError ? (
-        <div className="rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 p-4 text-sm text-red-700 dark:text-red-400">
-          Failed to load repositories: {fetchError}
-        </div>
+        <RepositoryLoadError error={fetchError} onRetry={fetchRepos} />
       ) : repos.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-10 text-center">
           <svg
@@ -406,7 +570,7 @@ export function Repositories() {
           </svg>
           <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">No repositories yet</p>
           <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
-            Add a repository above to start receiving automated code reviews.
+            Add a repository above to enable GitHub PR automation. Local demo and pasted-diff reviews still work without GitHub.
           </p>
         </div>
       ) : (
@@ -416,7 +580,12 @@ export function Repositories() {
               Connected Repositories ({repos.length})
             </h2>
           </div>
-          <div className="overflow-x-auto">
+          <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-800" data-testid="repository-card-list">
+            {repos.map(repo => (
+              <RepoCard key={repo.id} repo={repo} onRefresh={fetchRepos} />
+            ))}
+          </div>
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
