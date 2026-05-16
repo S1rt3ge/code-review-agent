@@ -11,6 +11,13 @@ const STATS_RESPONSE = {
   estimated_cost_this_month: 0.45,
 }
 
+const EMPTY_STATS_RESPONSE = {
+  total_reviews: 0,
+  reviews_today: 0,
+  tokens_used_this_month: 0,
+  estimated_cost_this_month: 0,
+}
+
 const REVIEWS_RESPONSE = {
   reviews: [
     {
@@ -31,6 +38,22 @@ const REVIEWS_RESPONSE = {
     },
   ],
   total: 2,
+}
+
+const EMPTY_REVIEWS_RESPONSE = { reviews: [], total: 0 }
+
+const SETTINGS_UNCONFIGURED = {
+  plan: 'free',
+  api_key_claude_set: false,
+  api_key_gpt_set: false,
+  ollama_enabled: false,
+  default_agents: ['security', 'performance', 'style', 'logic'],
+  warnings: [],
+}
+
+const SETTINGS_WITH_OLLAMA = {
+  ...SETTINGS_UNCONFIGURED,
+  ollama_enabled: true,
 }
 
 const STATS_WITH_FINDINGS = {
@@ -120,10 +143,12 @@ describe('Dashboard page', () => {
 
   it('shows empty state when there are no reviews', async () => {
     fetch
-      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(EMPTY_STATS_RESPONSE), { status: 200 }))
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ reviews: [], total: 0 }), { status: 200 })
+        new Response(JSON.stringify(EMPTY_REVIEWS_RESPONSE), { status: 200 })
       )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ repositories: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(SETTINGS_UNCONFIGURED), { status: 200 }))
 
     renderDashboard()
 
@@ -134,10 +159,52 @@ describe('Dashboard page', () => {
     })
   })
 
+  it('shows first-run setup progress from repositories and settings', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(EMPTY_STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(EMPTY_REVIEWS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        repositories: [{
+          id: 'repo-1',
+          github_repo_owner: 'octocat',
+          github_repo_name: 'hello-world',
+        }]
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(SETTINGS_WITH_OLLAMA), { status: 200 }))
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByText('Setup progress')).toBeInTheDocument()
+      expect(screen.getByText('3/4 complete')).toBeInTheDocument()
+      expect(screen.getByText('Account ready')).toBeInTheDocument()
+      expect(screen.getByText('Repository connected')).toBeInTheDocument()
+      expect(screen.getByText('LLM provider ready')).toBeInTheDocument()
+      expect(screen.getByText('Run your first review')).toBeInTheDocument()
+    })
+  })
+
+  it('keeps onboarding actions usable when setup metadata fails', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(EMPTY_STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(EMPTY_REVIEWS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Repository API unavailable' }), { status: 500 }))
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByText(/setup progress is temporarily unavailable/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Try demo review' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Paste diff' })).toBeInTheDocument()
+    })
+  })
+
   it('starts a local demo review from the empty state', async () => {
     fetch
-      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ reviews: [], total: 0 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(EMPTY_STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(EMPTY_REVIEWS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ repositories: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(SETTINGS_UNCONFIGURED), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         id: 'demo-review-1',
         status: 'done',
@@ -161,8 +228,10 @@ describe('Dashboard page', () => {
 
   it('creates a local review from pasted diff without repositories', async () => {
     fetch
-      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ reviews: [], total: 0 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(EMPTY_STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(EMPTY_REVIEWS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ repositories: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(SETTINGS_UNCONFIGURED), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ repositories: [] }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         id: 'paste-review-1',
