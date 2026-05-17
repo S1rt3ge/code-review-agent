@@ -42,6 +42,13 @@ jobs:
           python scripts/review_dna.py check --advisory --json "${args[@]}" > review-dna-check.json
           cat review-dna-check.json
 
+      - name: Generate Review DNA criteria
+        shell: bash
+        run: |
+          python scripts/review_dna.py criteria --json > review-dna-criteria.json
+          python scripts/review_dna.py criteria > review-dna-criteria.md
+          cat review-dna-criteria.md
+
       - name: Write Review DNA summary
         shell: python
         run: |
@@ -50,6 +57,9 @@ jobs:
           from pathlib import Path
 
           result = json.loads(Path("review-dna-check.json").read_text(encoding="utf-8"))
+          criteria_pack = json.loads(
+              Path("review-dna-criteria.json").read_text(encoding="utf-8")
+          )
           lines = [
               "## Review DNA Advisory Check",
               "",
@@ -81,13 +91,24 @@ jobs:
           else:
               lines.append("- None")
 
+          lines.extend(["", "### Review DNA Criteria Pack", ""])
+          lines.append(
+              "The workflow uploaded `review-dna-criteria.md` and "
+              "`review-dna-criteria.json` for Review Passport input."
+          )
+          for criterion in criteria_pack["criteria"]:
+              lines.append(f"- **{criterion['id']}**: {criterion['criterion']}")
+
           summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
           with summary_path.open("a", encoding="utf-8") as summary:
               summary.write("\n".join(lines))
               summary.write("\n")
 
-      - name: Upload Review DNA artifact
+      - name: Upload Review DNA artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: review-dna-check
-          path: review-dna-check.json
+          name: review-dna
+          path: |
+            review-dna-check.json
+            review-dna-criteria.json
+            review-dna-criteria.md

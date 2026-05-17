@@ -222,3 +222,8 @@ The Criteria Pack slice should convert Review DNA into a small set of stable
 acceptance criteria. These criteria become the bridge between repository-level
 methodology and Review Passport's pasted `spec_input` field.
 
+The Criteria artifact slice should make that bridge visible on every PR by
+publishing both JSON and Markdown criteria artifacts from the advisory workflow.
+This keeps the workflow non-blocking while giving reviewers a ready-made
+Review Passport input.
+

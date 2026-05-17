@@ -362,6 +362,8 @@ against the profile and reports a project-fit score, missing spec/test evidence,
 local-first risks, and recommended verification commands. Pull requests also run
 a non-blocking Review DNA workflow that uploads the JSON report and writes the
 same score to the GitHub Actions step summary.
+The workflow also uploads Criteria Pack JSON/Markdown artifacts for Review
+Passport input using read-only repository access with no secrets or PR writes.
 
 Use `criteria` when generating a Review Passport: it renders paste-ready
 acceptance criteria from `review-dna.yml`, including spec-first evidence,

@@ -18,7 +18,7 @@ The user-visible outcome is:
 - `python scripts/review_dna.py check` evaluates the current change set against
   the profile and reports a project-fit score
 - `.github/workflows/review-dna.yml` runs the check on pull requests as an
-  advisory summary and artifact
+  advisory summary and artifacts
 - `python scripts/review_dna.py criteria` prints Review Passport-ready
   acceptance criteria derived from the profile
 
@@ -48,6 +48,9 @@ The user-visible outcome is:
 - As a portfolio reviewer, I want the criteria pack to show evidence sources and
   verification commands, so that the project standards look concrete rather than
   aspirational.
+- As a PR reviewer, I want the Review DNA workflow to upload criteria artifacts,
+  so that I can reuse the exact acceptance criteria in Review Passport without
+  running local commands.
 
 ## Data Model
 
@@ -226,8 +229,11 @@ Behavior:
 - collect changed paths from the PR base/head diff
 - run `python scripts/review_dna.py check --advisory --json`
 - upload `review-dna-check.json`
+- upload `review-dna-criteria.json`
+- upload `review-dna-criteria.md`
 - append status, score, issues, and recommended commands to
   `$GITHUB_STEP_SUMMARY`
+- append a short Criteria Pack section to `$GITHUB_STEP_SUMMARY`
 ```
 
 The workflow must not fail on project-fit `WARN` or `FAIL`. It may fail if the
@@ -344,6 +350,8 @@ Terminal states:
 - CI summary rendering should handle zero issues and zero recommended commands.
 - The workflow should not require secrets, GitHub API writes, comments, labels,
   or branch-protection changes.
+- CI artifact upload should include both Review DNA check JSON and Review DNA
+  criteria JSON/Markdown.
 - Criteria output should stay under the Review Passport `spec_input` 20000
   character limit.
 - Empty profiles still render a valid criteria pack with generic local review
@@ -367,6 +375,7 @@ Rollout order:
 10. Add `--advisory` exit-code mode for CI.
 11. Add non-blocking Review DNA GitHub Actions workflow and README usage.
 12. Add Review DNA Criteria Pack CLI output for Review Passport.
+13. Upload Review DNA Criteria Pack artifacts from the advisory workflow.
 
 Dependencies:
 
