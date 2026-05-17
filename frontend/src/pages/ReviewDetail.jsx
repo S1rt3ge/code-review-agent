@@ -182,24 +182,35 @@ function AboutReviewPanel({ agents, lmUsed }) {
  *   onGenerate: (payload: any) => Promise<void>,
  *   onDelete: () => Promise<void>,
  *   onCopyMarkdown: () => Promise<string>,
+ *   onImportReviewDnaCriteria: () => Promise<any>,
  *   onPostToPr: () => Promise<any>,
  *   onPublishGate: () => Promise<any>
  * }} props
  * @returns {React.ReactElement}
  */
-function ReviewPassportPanel({ passport, onGenerate, onDelete, onCopyMarkdown, onPostToPr, onPublishGate }) {
+function ReviewPassportPanel({
+  passport,
+  onGenerate,
+  onDelete,
+  onCopyMarkdown,
+  onImportReviewDnaCriteria,
+  onPostToPr,
+  onPublishGate,
+}) {
   const [mode, setMode] = useState('combined')
+  const [specSourceType, setSpecSourceType] = useState('manual')
   const [specRef, setSpecRef] = useState('')
   const [specInput, setSpecInput] = useState('')
   const [codeDiff, setCodeDiff] = useState('')
   const [busy, setBusy] = useState(false)
+  const [criteriaBusy, setCriteriaBusy] = useState(false)
   const [error, setError] = useState(null)
   const [copyMessage, setCopyMessage] = useState(null)
 
   const requiresSpec = mode !== 'anti_ai_slop'
   const specTooLong = specInput.length > 20000
   const diffTooLong = codeDiff.length > 100000
-  const canSubmit = !busy && !specTooLong && !diffTooLong && (!requiresSpec || specInput.trim())
+  const canSubmit = !busy && !criteriaBusy && !specTooLong && !diffTooLong && (!requiresSpec || specInput.trim())
 
   const handleGenerate = async event => {
     event.preventDefault()
@@ -213,13 +224,14 @@ function ReviewPassportPanel({ passport, onGenerate, onDelete, onCopyMarkdown, o
     try {
       await onGenerate({
         mode,
-        spec_source_type: 'manual',
+        spec_source_type: specSourceType,
         spec_source_ref: specRef.trim() || null,
         spec_input: specInput.trim() || null,
         code_diff: codeDiff.trim() || null,
       })
       setSpecInput('')
       setCodeDiff('')
+      setSpecSourceType('manual')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate passport')
     } finally {
@@ -236,6 +248,24 @@ function ReviewPassportPanel({ passport, onGenerate, onDelete, onCopyMarkdown, o
       setError(err instanceof Error ? err.message : 'Failed to delete passport')
     } finally {
       setBusy(false)
+    }
+  }
+
+  const handleImportReviewDnaCriteria = async () => {
+    setError(null)
+    setCopyMessage(null)
+    setCriteriaBusy(true)
+    try {
+      const pack = await onImportReviewDnaCriteria()
+      setSpecSourceType(pack.spec_source_type || 'review_dna')
+      setSpecRef(pack.spec_source_ref || `${pack.title} (${pack.source_profile})`)
+      setSpecInput(pack.markdown || '')
+      if (mode === 'anti_ai_slop') setMode('combined')
+      setCopyMessage('Review DNA criteria loaded.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load Review DNA criteria')
+    } finally {
+      setCriteriaBusy(false)
     }
   }
 
@@ -495,9 +525,21 @@ function ReviewPassportPanel({ passport, onGenerate, onDelete, onCopyMarkdown, o
             ))}
           </div>
 
+          <button
+            type="button"
+            onClick={handleImportReviewDnaCriteria}
+            disabled={busy || criteriaBusy}
+            className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+          >
+            {criteriaBusy ? 'Loading Review DNA…' : 'Use Review DNA criteria'}
+          </button>
+
           <input
             value={specRef}
-            onChange={event => setSpecRef(event.target.value)}
+            onChange={event => {
+              setSpecSourceType('manual')
+              setSpecRef(event.target.value)
+            }}
             placeholder="Source reference, e.g. Issue #53"
             maxLength={120}
             className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-white"
@@ -505,7 +547,10 @@ function ReviewPassportPanel({ passport, onGenerate, onDelete, onCopyMarkdown, o
 
           <textarea
             value={specInput}
-            onChange={event => setSpecInput(event.target.value)}
+            onChange={event => {
+              setSpecSourceType('manual')
+              setSpecInput(event.target.value)
+            }}
             placeholder="Paste acceptance criteria or issue/spec text"
             rows={5}
             maxLength={20000}
@@ -643,6 +688,10 @@ export function ReviewDetail() {
     const data = await get(`/reviews/${id}/passport/markdown`)
     return data.body
   }, [get, id])
+
+  const handleImportReviewDnaCriteria = useCallback(async () => {
+    return get('/reviews/review-dna/criteria-pack')
+  }, [get])
 
   const handlePostPassportToPr = useCallback(async () => {
     const data = await post(`/reviews/${id}/passport/post-comment`, {})
@@ -861,6 +910,7 @@ export function ReviewDetail() {
             onGenerate={handleGeneratePassport}
             onDelete={handleDeletePassport}
             onCopyMarkdown={handleCopyPassportMarkdown}
+            onImportReviewDnaCriteria={handleImportReviewDnaCriteria}
             onPostToPr={handlePostPassportToPr}
             onPublishGate={handlePublishPassportGate}
           />
