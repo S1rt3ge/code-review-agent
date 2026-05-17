@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 
 from backend.services.review_dna import (
+    build_review_dna_criteria_pack,
     build_review_dna_profile,
+    render_review_dna_criteria_pack,
     render_review_dna_instructions,
     render_review_dna_check_report,
     run_review_dna_check,
@@ -280,6 +282,67 @@ def test_review_dna_cli_check_advisory_returns_success_for_project_fit_fail(
     assert exit_code == 0
     assert payload["status"] == "FAIL"
     assert payload["score"] == 50
+    assert captured.err == ""
+
+
+def test_build_review_dna_criteria_pack_is_passport_ready(tmp_path: Path) -> None:
+    repo = _make_review_dna_repo(tmp_path)
+    profile = build_review_dna_profile(repo)
+
+    pack = build_review_dna_criteria_pack(profile)
+
+    assert pack.title == "Review DNA Criteria Pack"
+    assert pack.source_profile == profile.project_name
+    assert [criterion.id for criterion in pack.criteria] == [
+        "AC-1",
+        "AC-2",
+        "AC-3",
+        "AC-4",
+        "AC-5",
+    ]
+    criteria_text = "\n".join(criterion.criterion for criterion in pack.criteria)
+    assert "spec-first" in criteria_text.lower()
+    assert "tests" in criteria_text.lower()
+    assert "local demo" in criteria_text.lower()
+    assert "Review Passport" in criteria_text
+    assert any(
+        "python scripts/evaluate_review_quality.py" in command
+        for criterion in pack.criteria
+        for command in criterion.verification
+    )
+
+
+def test_render_review_dna_criteria_pack_outputs_paste_ready_markdown(
+    tmp_path: Path,
+) -> None:
+    repo = _make_review_dna_repo(tmp_path)
+    profile = build_review_dna_profile(repo)
+    pack = build_review_dna_criteria_pack(profile)
+
+    rendered = render_review_dna_criteria_pack(pack)
+
+    assert rendered.startswith("# Review DNA Criteria Pack")
+    assert "Paste this into Review Passport" in rendered
+    assert "- [ ] AC-1:" in rendered
+    assert "Evidence:" in rendered
+    assert "Verification:" in rendered
+
+
+def test_review_dna_cli_criteria_outputs_json(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _make_review_dna_repo(tmp_path)
+
+    exit_code = review_dna_main(["criteria", "--repo", str(repo), "--json"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert payload["title"] == "Review DNA Criteria Pack"
+    assert payload["source_profile"] == repo.name
+    assert payload["criteria"][0]["id"] == "AC-1"
+    assert "spec-first" in payload["criteria"][0]["criterion"].lower()
     assert captured.err == ""
 
 

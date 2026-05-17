@@ -19,6 +19,8 @@ The user-visible outcome is:
   the profile and reports a project-fit score
 - `.github/workflows/review-dna.yml` runs the check on pull requests as an
   advisory summary and artifact
+- `python scripts/review_dna.py criteria` prints Review Passport-ready
+  acceptance criteria derived from the profile
 
 ## User Stories
 
@@ -40,6 +42,12 @@ The user-visible outcome is:
   checklist.
 - As a solo maintainer, I want the GitHub check to stay advisory, so that
   project-fit warnings are visible without becoming a branch-protection trap.
+- As a developer generating a Review Passport, I want Review DNA as paste-ready
+  acceptance criteria, so that the passport can evaluate the PR against project
+  methodology without me rewriting the checklist by hand.
+- As a portfolio reviewer, I want the criteria pack to show evidence sources and
+  verification commands, so that the project standards look concrete rather than
+  aspirational.
 
 ## Data Model
 
@@ -91,6 +99,22 @@ ReviewDNACheckResult
 - changed_files: list[str]
 - issues: list[ReviewDNACheckIssue]
 - recommended_commands: list[str]
+```
+
+```text
+ReviewDNACriterion
+- id: str
+- criterion: str
+- rationale: str
+- evidence: list[str]
+- verification: list[str]
+```
+
+```text
+ReviewDNACriteriaPack
+- title: str
+- source_profile: str
+- criteria: list[ReviewDNACriterion]
 ```
 
 Generated file:
@@ -209,6 +233,22 @@ Behavior:
 The workflow must not fail on project-fit `WARN` or `FAIL`. It may fail if the
 CLI cannot run, JSON cannot be parsed, or repository checkout is broken.
 
+```text
+python scripts/review_dna.py criteria [--repo PATH] [--profile PATH] [--json]
+```
+
+Behavior:
+
+- loads `review-dna.yml` when present, otherwise scans the repo
+- prints Markdown by default for pasting into Review Passport `spec_input`
+- prints JSON when `--json` is passed
+- uses stable criterion IDs (`AC-1`, `AC-2`, ...)
+
+Exit codes:
+
+- `0` criteria rendered
+- `2` invalid repo path or invalid profile path
+
 ## Screens
 
 No UI changes in the first slice. Results are terminal output.
@@ -220,7 +260,8 @@ Terminal states:
   in text mode.
 - Error: invalid path or overwrite block prints a concise stderr message.
 - Success: scan prints profile, init prints output path, instructions prints
-  Markdown, check prints score/status/issues.
+  Markdown, check prints score/status/issues, criteria prints Review
+  Passport-ready acceptance criteria.
 
 ## Business Logic
 
@@ -275,6 +316,14 @@ Terminal states:
     `python scripts/evaluate_review_quality.py`
   - frontend changes recommend frontend tests/build
   - backend or script changes recommend backend tests and ruff
+- Criteria Pack rules:
+  - generate at most 6 high-signal criteria
+  - include spec-first evidence
+  - include test evidence
+  - include local-first/no-paid-services behavior
+  - include Review Passport / Anti-AI-Slop preservation
+  - include required quality gates
+  - keep each criterion specific enough for Review Passport coverage matching
 
 ## Edge Cases
 
@@ -295,6 +344,10 @@ Terminal states:
 - CI summary rendering should handle zero issues and zero recommended commands.
 - The workflow should not require secrets, GitHub API writes, comments, labels,
   or branch-protection changes.
+- Criteria output should stay under the Review Passport `spec_input` 20000
+  character limit.
+- Empty profiles still render a valid criteria pack with generic local review
+  criteria.
 
 ## Priority / Dependencies
 
@@ -313,6 +366,7 @@ Rollout order:
 9. Implement advisory `check` command and JSON/text reports.
 10. Add `--advisory` exit-code mode for CI.
 11. Add non-blocking Review DNA GitHub Actions workflow and README usage.
+12. Add Review DNA Criteria Pack CLI output for Review Passport.
 
 Dependencies:
 

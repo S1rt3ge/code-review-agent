@@ -116,6 +116,42 @@ class ReviewDNACheckResult:
         }
 
 
+@dataclass(frozen=True)
+class ReviewDNACriterion:
+    """Single Review Passport-ready acceptance criterion."""
+
+    id: str
+    criterion: str
+    rationale: str
+    evidence: tuple[str, ...]
+    verification: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "criterion": self.criterion,
+            "rationale": self.rationale,
+            "evidence": list(self.evidence),
+            "verification": list(self.verification),
+        }
+
+
+@dataclass(frozen=True)
+class ReviewDNACriteriaPack:
+    """Acceptance criteria generated from a Review DNA profile."""
+
+    title: str
+    source_profile: str
+    criteria: tuple[ReviewDNACriterion, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "title": self.title,
+            "source_profile": self.source_profile,
+            "criteria": [criterion.to_dict() for criterion in self.criteria],
+        }
+
+
 def build_review_dna_profile(repo_path: str | Path) -> ReviewDNAProfile:
     """Build a deterministic Review DNA profile for a local repository."""
     root = _resolve_repo_path(repo_path)
@@ -273,6 +309,121 @@ def render_review_dna_check_report(result: ReviewDNACheckResult) -> str:
     return "\n".join(lines)
 
 
+def build_review_dna_criteria_pack(
+    profile: ReviewDNAProfile,
+) -> ReviewDNACriteriaPack:
+    """Build stable acceptance criteria for Review Passport input."""
+    evidence_paths = tuple(source.path for source in profile.evidence_sources)
+    required_commands = tuple(
+        gate.command for gate in profile.quality_gates if gate.required
+    )
+    review_eval_commands = tuple(
+        command
+        for command in required_commands
+        if "evaluate_review_quality" in command
+    )
+    test_commands = tuple(
+        command
+        for command in required_commands
+        if "pytest" in command or "npm test" in command
+    )
+
+    criteria = (
+        ReviewDNACriterion(
+            id="AC-1",
+            criterion=(
+                "Spec-first evidence exists for behavior changes, including an "
+                "idea or feature spec that explains the user value, data/API "
+                "impact, business logic, and edge cases."
+            ),
+            rationale="The project methodology requires docs before implementation.",
+            evidence=_filter_evidence(
+                evidence_paths,
+                ("PROJECT_IDEA.md", "SPEC_TEMPLATE.md", "docs/"),
+            ),
+            verification=(),
+        ),
+        ReviewDNACriterion(
+            id="AC-2",
+            criterion=(
+                "Tests cover changed behavior and keep deterministic local "
+                "review flows regression-safe."
+            ),
+            rationale="Review DNA treats missing tests as a project-fit risk.",
+            evidence=_filter_evidence(evidence_paths, ("evals/", "backend/tests/")),
+            verification=test_commands,
+        ),
+        ReviewDNACriterion(
+            id="AC-3",
+            criterion=(
+                "The local demo remains usable without GitHub credentials, SMTP, "
+                "PostgreSQL setup outside Docker, or paid LLM providers."
+            ),
+            rationale="The repository promise is a no-paid-services local demo path.",
+            evidence=_filter_evidence(evidence_paths, ("README.md", "docs/local")),
+            verification=_commands_containing(profile, ("docker compose",)),
+        ),
+        ReviewDNACriterion(
+            id="AC-4",
+            criterion=(
+                "Review Passport, Anti-AI-Slop, Review DNA, and deterministic "
+                "review eval behavior are preserved when review logic changes."
+            ),
+            rationale="The product differentiates through evidence-backed review quality.",
+            evidence=_filter_evidence(
+                evidence_paths,
+                ("REVIEW_PASSPORT", "REVIEW_DNA", "REVIEW_EVAL", "evals/"),
+            ),
+            verification=review_eval_commands,
+        ),
+        ReviewDNACriterion(
+            id="AC-5",
+            criterion=(
+                "Required quality gates are known and either pass locally/CI or "
+                "are explicitly called out with residual risk."
+            ),
+            rationale="Review DNA turns repo-specific quality expectations into checks.",
+            evidence=_filter_evidence(
+                evidence_paths,
+                ("docs/release-checklist.md", "docs/branch-protection-policy.md"),
+            ),
+            verification=required_commands,
+        ),
+    )
+
+    return ReviewDNACriteriaPack(
+        title="Review DNA Criteria Pack",
+        source_profile=profile.project_name,
+        criteria=criteria,
+    )
+
+
+def render_review_dna_criteria_pack(pack: ReviewDNACriteriaPack) -> str:
+    """Render Review Passport-ready criteria Markdown."""
+    lines = [
+        "# Review DNA Criteria Pack",
+        "",
+        "Paste this into Review Passport as acceptance criteria.",
+        "",
+    ]
+
+    for criterion in pack.criteria:
+        lines.append(f"- [ ] {criterion.id}: {criterion.criterion}")
+        lines.append(f"  Rationale: {criterion.rationale}")
+        if criterion.evidence:
+            evidence = ", ".join(f"`{path}`" for path in criterion.evidence)
+            lines.append(f"  Evidence: {evidence}")
+        else:
+            lines.append("  Evidence: Review DNA profile")
+        if criterion.verification:
+            commands = ", ".join(f"`{command}`" for command in criterion.verification)
+            lines.append(f"  Verification: {commands}")
+        else:
+            lines.append("  Verification: reviewer judgment against changed files")
+
+    return "\n".join(lines)
+
+
 def profile_to_json(profile: ReviewDNAProfile) -> str:
     """Serialize a profile to deterministic JSON."""
     return json.dumps(profile.to_dict(), indent=2, sort_keys=True) + "\n"
@@ -281,6 +432,11 @@ def profile_to_json(profile: ReviewDNAProfile) -> str:
 def review_dna_check_to_json(result: ReviewDNACheckResult) -> str:
     """Serialize a check result to deterministic JSON."""
     return json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n"
+
+
+def review_dna_criteria_pack_to_json(pack: ReviewDNACriteriaPack) -> str:
+    """Serialize a criteria pack to deterministic JSON."""
+    return json.dumps(pack.to_dict(), indent=2, sort_keys=True) + "\n"
 
 
 def write_review_dna_profile(
@@ -577,6 +733,26 @@ def _recommended_commands(profile: ReviewDNAProfile, paths: tuple[str, ...]) -> 
         gate.command for gate in profile.quality_gates if gate.command in wanted
     ]
     return ordered
+
+
+def _filter_evidence(paths: tuple[str, ...], prefixes_or_tokens: tuple[str, ...]) -> tuple[str, ...]:
+    matches: list[str] = []
+    for path in paths:
+        if any(path.startswith(token) or token in path for token in prefixes_or_tokens):
+            matches.append(path)
+    return tuple(matches[:6])
+
+
+def _commands_containing(
+    profile: ReviewDNAProfile,
+    tokens: tuple[str, ...],
+) -> tuple[str, ...]:
+    commands = [
+        gate.command
+        for gate in profile.quality_gates
+        if any(token in gate.command for token in tokens)
+    ]
+    return tuple(commands)
 
 
 def _normalize_changed_files(paths: list[str] | tuple[str, ...]) -> list[str]:
