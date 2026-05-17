@@ -257,6 +257,45 @@ def test_review_dna_cli_check_outputs_json_for_explicit_changed_files(
     assert captured.err == ""
 
 
+def test_review_dna_cli_check_advisory_returns_success_for_project_fit_fail(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _make_review_dna_repo(tmp_path)
+
+    exit_code = review_dna_main(
+        [
+            "check",
+            "--repo",
+            str(repo),
+            "--changed-file",
+            "backend/services/new_feature.py",
+            "--json",
+            "--advisory",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert payload["status"] == "FAIL"
+    assert payload["score"] == 50
+    assert captured.err == ""
+
+
+def test_review_dna_workflow_is_advisory() -> None:
+    workflow_path = Path(".github/workflows/review-dna.yml")
+
+    workflow = workflow_path.read_text(encoding="utf-8")
+
+    assert "Review DNA Advisory Check" in workflow
+    assert "pull_request:" in workflow
+    assert "python scripts/review_dna.py check --advisory --json" in workflow
+    assert "GITHUB_STEP_SUMMARY" in workflow
+    assert "review-dna-check.json" in workflow
+    assert "gh pr comment" not in workflow
+
+
 def _make_review_dna_repo(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     (path / "README.md").write_text("# Demo Repo\n", encoding="utf-8")

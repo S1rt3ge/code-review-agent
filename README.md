@@ -358,7 +358,9 @@ constraints, and quality gates. It can write `review-dna.yml` and render
 reviewer-ready Markdown so AI review tools use this project's actual standards
 instead of generic feedback. The advisory `check` command compares changed files
 against the profile and reports a project-fit score, missing spec/test evidence,
-local-first risks, and recommended verification commands.
+local-first risks, and recommended verification commands. Pull requests also run
+a non-blocking Review DNA workflow that uploads the JSON report and writes the
+same score to the GitHub Actions step summary.
 
 ### Frontend
 

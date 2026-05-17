@@ -150,6 +150,8 @@ v0.4:
 
 v0.5:
 
+- Add a GitHub Actions advisory check that publishes Review DNA output to the
+  PR summary without becoming a required merge gate.
 - Dashboard panel that displays the Review DNA profile.
 - Passport integration that imports review rules as acceptance criteria.
 - Optional GitHub Action that uploads Review DNA as a PR artifact.
@@ -160,6 +162,8 @@ Metrics:
 - Generated profile includes at least 5 evidence sources.
 - Check output explains at least 3 common risks: missing spec, missing tests,
   and local-first regression risk.
+- PR advisory check shows Review DNA status and score without blocking a solo
+  maintainer when the score is not perfect.
 - Tests remain deterministic and require no external services.
 - New contributors can run profile generation from a fresh clone.
 
@@ -172,6 +176,7 @@ Metrics:
 | CLI overwrites user edits | Low | Refuse overwrite unless `--force` is passed |
 | Scope grows into another review engine | Medium | Keep MVP limited to profile and instructions |
 | Check blocks a solo maintainer unnecessarily | Medium | Make CLI advisory in MVP, with explicit status and score |
+| GitHub workflow accidentally becomes branch protection friction | Medium | Keep workflow advisory, return success for project-fit WARN/FAIL, and document that it is not required |
 | Static file checks miss semantic intent | Medium | Phrase output as project-fit evidence, not proof of correctness |
 | Generated instructions expose secrets | Low | Only read file names and curated docs, never `.env` values |
 
@@ -202,4 +207,9 @@ from explicit `--changed-file` arguments, then applies deterministic rules:
 - auth, provider, Docker, settings, or local demo changes require local-first
   evidence
 - review analyzer/passport/DNA changes recommend review quality evals
+
+The GitHub Actions slice must call the same deterministic CLI, upload JSON as an
+artifact, and write a Markdown summary. Project-fit `WARN` or `FAIL` should be
+visible in the PR but should not fail the job; invalid CLI/runtime errors may
+still fail so workflow breakage is not hidden.
 
