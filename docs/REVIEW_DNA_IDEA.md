@@ -152,6 +152,8 @@ v0.5:
 
 - Add a GitHub Actions advisory check that publishes Review DNA output to the
   PR summary without becoming a required merge gate.
+- Add a Review DNA Criteria Pack export that turns the profile into Review
+  Passport-ready acceptance criteria.
 - Dashboard panel that displays the Review DNA profile.
 - Passport integration that imports review rules as acceptance criteria.
 - Optional GitHub Action that uploads Review DNA as a PR artifact.
@@ -164,6 +166,8 @@ Metrics:
   and local-first regression risk.
 - PR advisory check shows Review DNA status and score without blocking a solo
   maintainer when the score is not perfect.
+- Criteria Pack output can be pasted into Review Passport as acceptance
+  criteria without manual rewriting.
 - Tests remain deterministic and require no external services.
 - New contributors can run profile generation from a fresh clone.
 
@@ -177,6 +181,7 @@ Metrics:
 | Scope grows into another review engine | Medium | Keep MVP limited to profile and instructions |
 | Check blocks a solo maintainer unnecessarily | Medium | Make CLI advisory in MVP, with explicit status and score |
 | GitHub workflow accidentally becomes branch protection friction | Medium | Keep workflow advisory, return success for project-fit WARN/FAIL, and document that it is not required |
+| Criteria export becomes vague checklist text | Medium | Generate stable AC ids, concrete criteria, evidence sources, and verification commands |
 | Static file checks miss semantic intent | Medium | Phrase output as project-fit evidence, not proof of correctness |
 | Generated instructions expose secrets | Low | Only read file names and curated docs, never `.env` values |
 
@@ -212,4 +217,8 @@ The GitHub Actions slice must call the same deterministic CLI, upload JSON as an
 artifact, and write a Markdown summary. Project-fit `WARN` or `FAIL` should be
 visible in the PR but should not fail the job; invalid CLI/runtime errors may
 still fail so workflow breakage is not hidden.
+
+The Criteria Pack slice should convert Review DNA into a small set of stable
+acceptance criteria. These criteria become the bridge between repository-level
+methodology and Review Passport's pasted `spec_input` field.
 
