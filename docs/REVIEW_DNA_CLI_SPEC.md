@@ -15,6 +15,8 @@ The user-visible outcome is:
 - `python scripts/review_dna.py scan --json` prints a machine-readable profile
 - `python scripts/review_dna.py init` writes `review-dna.yml`
 - `python scripts/review_dna.py instructions` prints reviewer-ready Markdown
+- `python scripts/review_dna.py check` evaluates the current change set against
+  the profile and reports a project-fit score
 
 ## User Stories
 
@@ -28,6 +30,12 @@ The user-visible outcome is:
   `review-dna.yml`, so that local edits are not lost.
 - As a local evaluator, I want the CLI to run without external services, so that
   the feature is testable from a fresh clone.
+- As a solo maintainer, I want an advisory check of changed files against the
+  repo's methodology, so that I can catch missing specs, tests, or local-demo
+  evidence before opening a PR.
+- As a PR reviewer, I want the check to recommend the commands most relevant to
+  the changed files, so that I can verify the risk instead of reading a generic
+  checklist.
 
 ## Data Model
 
@@ -63,13 +71,31 @@ QualityGate
 - reason: str
 ```
 
+```text
+ReviewDNACheckIssue
+- code: str
+- severity: str
+- message: str
+- paths: list[str]
+- recommendation: str
+```
+
+```text
+ReviewDNACheckResult
+- status: str
+- score: int
+- changed_files: list[str]
+- issues: list[ReviewDNACheckIssue]
+- recommended_commands: list[str]
+```
+
 Generated file:
 
 ```text
 review-dna.yml
 - project_name: string
 - generated_by: string
-- source_root: string
+- source_root: string, always "." for committed portable profiles
 - stacks: string[]
 - evidence_sources[]:
   - path: string
@@ -136,6 +162,27 @@ Exit codes:
 - `0` instructions rendered
 - `2` invalid repo path or invalid profile path
 
+```text
+python scripts/review_dna.py check [--repo PATH] [--profile PATH]
+                               [--changed-file PATH] [--json]
+```
+
+Behavior:
+
+- loads `review-dna.yml` when present, otherwise scans the repo
+- uses repeated `--changed-file` values when provided
+- otherwise reads changed file paths from local git status
+- prints a text report by default
+- prints JSON when `--json` is passed
+- remains advisory in MVP; failed project-fit returns exit code `1`, invalid
+  input returns `2`
+
+Exit codes:
+
+- `0` check ran and status is `PASS`
+- `1` check ran and status is `WARN` or `FAIL`
+- `2` invalid repo path, invalid profile path, or git status cannot be read
+
 ## Screens
 
 No UI changes in the first slice. Results are terminal output.
@@ -147,7 +194,7 @@ Terminal states:
   in text mode.
 - Error: invalid path or overwrite block prints a concise stderr message.
 - Success: scan prints profile, init prints output path, instructions prints
-  Markdown.
+  Markdown, check prints score/status/issues.
 
 ## Business Logic
 
@@ -180,9 +227,28 @@ Terminal states:
   - require local demo flow to remain usable without paid services
   - require Review Passport / Anti-AI-Slop evidence when review logic changes
 - `init` must not overwrite existing output unless `--force` is passed.
+- `init` must write `source_root: "."` for portable committed profiles.
 - Profile output must be deterministic: sort paths and rules by stable priority.
 - The scanner must not read `.env`, secrets, node_modules, build outputs, or git
   internals.
+- Check rules:
+  - start score at `100`
+  - subtract `25` for each high severity issue
+  - subtract `15` for each medium severity issue
+  - subtract `5` for each low severity issue
+  - status is `PASS` when score is at least `90` and no issues exist
+  - status is `WARN` when score is at least `70` and issues exist
+  - status is `FAIL` when score is below `70` or any high severity issue exists
+  - application code changes under `backend/`, `frontend/src/`, or `scripts/`
+    require matching tests unless the change is docs-only
+  - application code changes require a feature spec or idea doc update unless
+    the changed files are tests-only
+  - local auth, provider, Docker, settings, env, or GitHub integration changes
+    require local-first evidence in docs or tests
+  - review analyzer, passport, playground, eval, or DNA changes recommend
+    `python scripts/evaluate_review_quality.py`
+  - frontend changes recommend frontend tests/build
+  - backend or script changes recommend backend tests and ruff
 
 ## Edge Cases
 
@@ -196,6 +262,9 @@ Terminal states:
   known file names and shallow glob patterns.
 - Non-ASCII file names are allowed as paths but file contents are not required
   for detection.
+- Empty change sets return `PASS` with score `100`.
+- Explicit `--changed-file` paths are normalized to POSIX-style relative paths.
+- `check` must ignore deleted generated/cache paths when evaluating evidence.
 
 ## Priority / Dependencies
 
@@ -209,6 +278,9 @@ Rollout order:
 4. Implement `backend/services/review_dna.py`.
 5. Implement `scripts/review_dna.py`.
 6. Document usage in `README.md` after tests pass.
+7. Add portable `review-dna.yml`.
+8. Add service and CLI tests for Review DNA Check.
+9. Implement advisory `check` command and JSON/text reports.
 
 Dependencies:
 
