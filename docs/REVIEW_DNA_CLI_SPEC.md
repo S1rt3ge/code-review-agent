@@ -17,6 +17,8 @@ The user-visible outcome is:
 - `python scripts/review_dna.py instructions` prints reviewer-ready Markdown
 - `python scripts/review_dna.py check` evaluates the current change set against
   the profile and reports a project-fit score
+- `.github/workflows/review-dna.yml` runs the check on pull requests as an
+  advisory summary and artifact
 
 ## User Stories
 
@@ -36,6 +38,8 @@ The user-visible outcome is:
 - As a PR reviewer, I want the check to recommend the commands most relevant to
   the changed files, so that I can verify the risk instead of reading a generic
   checklist.
+- As a solo maintainer, I want the GitHub check to stay advisory, so that
+  project-fit warnings are visible without becoming a branch-protection trap.
 
 ## Data Model
 
@@ -164,7 +168,7 @@ Exit codes:
 
 ```text
 python scripts/review_dna.py check [--repo PATH] [--profile PATH]
-                               [--changed-file PATH] [--json]
+                               [--changed-file PATH] [--json] [--advisory]
 ```
 
 Behavior:
@@ -176,12 +180,34 @@ Behavior:
 - prints JSON when `--json` is passed
 - remains advisory in MVP; failed project-fit returns exit code `1`, invalid
   input returns `2`
+- returns exit code `0` for project-fit `WARN` or `FAIL` when `--advisory` is
+  passed, while still returning `2` for invalid input
 
 Exit codes:
 
 - `0` check ran and status is `PASS`
 - `1` check ran and status is `WARN` or `FAIL`
 - `2` invalid repo path, invalid profile path, or git status cannot be read
+
+### GitHub Actions workflow
+
+```text
+.github/workflows/review-dna.yml
+Name: Review DNA
+Trigger: pull_request to main
+Job: Review DNA Advisory Check
+Behavior:
+- checkout with full history
+- set up Python 3.12
+- collect changed paths from the PR base/head diff
+- run `python scripts/review_dna.py check --advisory --json`
+- upload `review-dna-check.json`
+- append status, score, issues, and recommended commands to
+  `$GITHUB_STEP_SUMMARY`
+```
+
+The workflow must not fail on project-fit `WARN` or `FAIL`. It may fail if the
+CLI cannot run, JSON cannot be parsed, or repository checkout is broken.
 
 ## Screens
 
@@ -265,6 +291,10 @@ Terminal states:
 - Empty change sets return `PASS` with score `100`.
 - Explicit `--changed-file` paths are normalized to POSIX-style relative paths.
 - `check` must ignore deleted generated/cache paths when evaluating evidence.
+- `--advisory` returns success for valid `WARN`/`FAIL` reports.
+- CI summary rendering should handle zero issues and zero recommended commands.
+- The workflow should not require secrets, GitHub API writes, comments, labels,
+  or branch-protection changes.
 
 ## Priority / Dependencies
 
@@ -281,6 +311,8 @@ Rollout order:
 7. Add portable `review-dna.yml`.
 8. Add service and CLI tests for Review DNA Check.
 9. Implement advisory `check` command and JSON/text reports.
+10. Add `--advisory` exit-code mode for CI.
+11. Add non-blocking Review DNA GitHub Actions workflow and README usage.
 
 Dependencies:
 
