@@ -354,8 +354,13 @@ def test_review_dna_workflow_is_advisory() -> None:
     assert "Review DNA Advisory Check" in workflow
     assert "pull_request:" in workflow
     assert "python scripts/review_dna.py check --advisory --json" in workflow
+    assert "python scripts/review_dna.py criteria --json" in workflow
+    assert "python scripts/review_dna.py criteria" in workflow
     assert "GITHUB_STEP_SUMMARY" in workflow
     assert "review-dna-check.json" in workflow
+    assert "review-dna-criteria.json" in workflow
+    assert "review-dna-criteria.md" in workflow
+    assert "Review DNA Criteria Pack" in workflow
     assert "gh pr comment" not in workflow
 
 
