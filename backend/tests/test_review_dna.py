@@ -2,10 +2,13 @@
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from backend.routers.reviews import get_review_dna_criteria_pack
 from backend.services.review_dna import (
+    build_review_dna_criteria_pack_for_repo,
     build_review_dna_criteria_pack,
     build_review_dna_profile,
     render_review_dna_criteria_pack,
@@ -344,6 +347,48 @@ def test_review_dna_cli_criteria_outputs_json(
     assert payload["criteria"][0]["id"] == "AC-1"
     assert "spec-first" in payload["criteria"][0]["criterion"].lower()
     assert captured.err == ""
+
+
+def test_build_review_dna_criteria_pack_for_repo_prefers_profile_file(
+    tmp_path: Path,
+) -> None:
+    repo = _make_review_dna_repo(tmp_path)
+    profile = build_review_dna_profile(repo)
+    write_review_dna_profile(profile, repo / "review-dna.yml")
+
+    pack = build_review_dna_criteria_pack_for_repo(repo)
+
+    assert pack.source_profile == repo.name
+    assert [criterion.id for criterion in pack.criteria] == [
+        "AC-1",
+        "AC-2",
+        "AC-3",
+        "AC-4",
+        "AC-5",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_review_dna_criteria_pack_api_response_uses_passport_markdown(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _make_review_dna_repo(tmp_path)
+    profile = build_review_dna_profile(repo)
+    write_review_dna_profile(profile, repo / "review-dna.yml")
+    monkeypatch.setattr("backend.routers.reviews.PROJECT_ROOT", repo)
+
+    response = await get_review_dna_criteria_pack(
+        current_user=SimpleNamespace(id="user-1")
+    )
+
+    assert response.title == "Review DNA Criteria Pack"
+    assert response.source_profile == repo.name
+    assert response.spec_source_type == "review_dna"
+    assert response.spec_source_ref == f"Review DNA Criteria Pack ({repo.name})"
+    assert response.markdown.startswith("# Review DNA Criteria Pack")
+    assert response.criteria[0].id == "AC-1"
+    assert "spec-first" in response.criteria[0].criterion.lower()
 
 
 def test_review_dna_workflow_is_advisory() -> None:

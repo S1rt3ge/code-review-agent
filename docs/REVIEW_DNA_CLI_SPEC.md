@@ -45,6 +45,9 @@ The user-visible outcome is:
 - As a developer generating a Review Passport, I want Review DNA as paste-ready
   acceptance criteria, so that the passport can evaluate the PR against project
   methodology without me rewriting the checklist by hand.
+- As a dashboard user, I want to import the current Review DNA Criteria Pack
+  into Review Passport with one click, so that local methodology is used without
+  terminal copy/paste.
 - As a portfolio reviewer, I want the criteria pack to show evidence sources and
   verification commands, so that the project standards look concrete rather than
   aspirational.
@@ -146,7 +149,34 @@ No RLS is required because no database table is added.
 
 ## API
 
-No HTTP API changes.
+HTTP:
+
+```text
+GET /api/reviews/review-dna/criteria-pack
+```
+
+Behavior:
+
+- requires the normal authenticated dashboard session
+- loads `review-dna.yml` when present, otherwise scans the repository
+- returns Review Passport-ready Markdown and structured criteria
+- does not write to the database, GitHub, or the local filesystem
+
+Response:
+
+```text
+title: string
+source_profile: string
+spec_source_type: "review_dna"
+spec_source_ref: string
+markdown: string
+criteria[]:
+  id: string
+  criterion: string
+  rationale: string
+  evidence: string[]
+  verification: string[]
+```
 
 CLI:
 
@@ -257,7 +287,12 @@ Exit codes:
 
 ## Screens
 
-No UI changes in the first slice. Results are terminal output.
+Review Passport panel:
+
+- Empty passport state includes a secondary `Use Review DNA criteria` action.
+- Clicking it fetches `/api/reviews/review-dna/criteria-pack`.
+- Success fills the source reference and acceptance criteria fields.
+- Failure shows an inline error and preserves any manually typed criteria.
 
 Terminal states:
 
@@ -376,6 +411,7 @@ Rollout order:
 11. Add non-blocking Review DNA GitHub Actions workflow and README usage.
 12. Add Review DNA Criteria Pack CLI output for Review Passport.
 13. Upload Review DNA Criteria Pack artifacts from the advisory workflow.
+14. Add dashboard API/UI import for the Review DNA Criteria Pack.
 
 Dependencies:
 
