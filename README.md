@@ -350,12 +350,15 @@ expected finding recall, unexpected findings, and an overall score.
 python scripts/review_dna.py scan --json
 python scripts/review_dna.py init
 python scripts/review_dna.py instructions
+python scripts/review_dna.py check
 ```
 
 Review DNA scans the repository for specs, evals, governance docs, local-first
 constraints, and quality gates. It can write `review-dna.yml` and render
 reviewer-ready Markdown so AI review tools use this project's actual standards
-instead of generic feedback.
+instead of generic feedback. The advisory `check` command compares changed files
+against the profile and reports a project-fit score, missing spec/test evidence,
+local-first risks, and recommended verification commands.
 
 ### Frontend
 
