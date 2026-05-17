@@ -236,6 +236,27 @@ describe('ReviewDetail page', () => {
     expect(fetch.mock.calls[2][1].method).toBe('GET')
   })
 
+  it('generates a review passport directly from Review DNA', async () => {
+    const user = userEvent.setup()
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify(REVIEW_RESPONSE), { status: 200 }))
+    fetch.mockResolvedValueOnce(passportNotFoundResponse())
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({
+      ...PASSPORT_RESPONSE,
+      spec_source_type: 'review_dna',
+      spec_source_ref: 'Review DNA Criteria Pack (code-review-agent)',
+      spec_input: '# Review DNA Criteria Pack\n\n- [ ] AC-1: Spec-first evidence exists',
+    }), { status: 200 }))
+
+    renderReviewDetail()
+
+    await screen.findByRole('button', { name: /generate passport/i })
+    await user.click(screen.getByRole('button', { name: /generate with review dna/i }))
+
+    expect(await screen.findByText('Ready with risks')).toBeInTheDocument()
+    expect(fetch.mock.calls[2][0]).toContain('/reviews/review-1/passport/review-dna')
+    expect(fetch.mock.calls[2][1].method).toBe('POST')
+  })
+
   it('copies and deletes an existing review passport', async () => {
     const user = userEvent.setup()
     const writeText = vi.fn().mockResolvedValue(undefined)

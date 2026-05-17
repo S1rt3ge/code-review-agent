@@ -183,6 +183,7 @@ function AboutReviewPanel({ agents, lmUsed }) {
  *   onDelete: () => Promise<void>,
  *   onCopyMarkdown: () => Promise<string>,
  *   onImportReviewDnaCriteria: () => Promise<any>,
+ *   onGenerateFromReviewDna: () => Promise<any>,
  *   onPostToPr: () => Promise<any>,
  *   onPublishGate: () => Promise<any>
  * }} props
@@ -194,6 +195,7 @@ function ReviewPassportPanel({
   onDelete,
   onCopyMarkdown,
   onImportReviewDnaCriteria,
+  onGenerateFromReviewDna,
   onPostToPr,
   onPublishGate,
 }) {
@@ -204,13 +206,14 @@ function ReviewPassportPanel({
   const [codeDiff, setCodeDiff] = useState('')
   const [busy, setBusy] = useState(false)
   const [criteriaBusy, setCriteriaBusy] = useState(false)
+  const [reviewDnaBusy, setReviewDnaBusy] = useState(false)
   const [error, setError] = useState(null)
   const [copyMessage, setCopyMessage] = useState(null)
 
   const requiresSpec = mode !== 'anti_ai_slop'
   const specTooLong = specInput.length > 20000
   const diffTooLong = codeDiff.length > 100000
-  const canSubmit = !busy && !criteriaBusy && !specTooLong && !diffTooLong && (!requiresSpec || specInput.trim())
+  const canSubmit = !busy && !criteriaBusy && !reviewDnaBusy && !specTooLong && !diffTooLong && (!requiresSpec || specInput.trim())
 
   const handleGenerate = async event => {
     event.preventDefault()
@@ -266,6 +269,20 @@ function ReviewPassportPanel({
       setError(err instanceof Error ? err.message : 'Failed to load Review DNA criteria')
     } finally {
       setCriteriaBusy(false)
+    }
+  }
+
+  const handleGenerateFromReviewDna = async () => {
+    setError(null)
+    setCopyMessage(null)
+    setReviewDnaBusy(true)
+    try {
+      await onGenerateFromReviewDna()
+      setCopyMessage('Passport generated from Review DNA.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate passport from Review DNA')
+    } finally {
+      setReviewDnaBusy(false)
     }
   }
 
@@ -525,14 +542,24 @@ function ReviewPassportPanel({
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={handleImportReviewDnaCriteria}
-            disabled={busy || criteriaBusy}
-            className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
-          >
-            {criteriaBusy ? 'Loading Review DNA…' : 'Use Review DNA criteria'}
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleImportReviewDnaCriteria}
+              disabled={busy || criteriaBusy || reviewDnaBusy}
+              className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+            >
+              {criteriaBusy ? 'Loading Review DNA…' : 'Use Review DNA criteria'}
+            </button>
+            <button
+              type="button"
+              onClick={handleGenerateFromReviewDna}
+              disabled={busy || criteriaBusy || reviewDnaBusy}
+              className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+            >
+              {reviewDnaBusy ? 'Generating from Review DNA…' : 'Generate with Review DNA'}
+            </button>
+          </div>
 
           <input
             value={specRef}
@@ -692,6 +719,12 @@ export function ReviewDetail() {
   const handleImportReviewDnaCriteria = useCallback(async () => {
     return get('/reviews/review-dna/criteria-pack')
   }, [get])
+
+  const handleGeneratePassportFromReviewDna = useCallback(async () => {
+    const data = await post(`/reviews/${id}/passport/review-dna`, {})
+    setPassport(data)
+    return data
+  }, [post, id])
 
   const handlePostPassportToPr = useCallback(async () => {
     const data = await post(`/reviews/${id}/passport/post-comment`, {})
@@ -911,6 +944,7 @@ export function ReviewDetail() {
             onDelete={handleDeletePassport}
             onCopyMarkdown={handleCopyPassportMarkdown}
             onImportReviewDnaCriteria={handleImportReviewDnaCriteria}
+            onGenerateFromReviewDna={handleGeneratePassportFromReviewDna}
             onPostToPr={handlePostPassportToPr}
             onPublishGate={handlePublishPassportGate}
           />
