@@ -77,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(review_dna_check_to_json(result), end="")
             else:
                 print(render_review_dna_check_report(result))
+            if args.advisory:
+                return 0
             return 0 if result.status == "PASS" else 1
 
     except (FileExistsError, OSError, ValueError) as exc:
@@ -174,6 +176,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Emit machine-readable JSON.",
+    )
+    check_parser.add_argument(
+        "--advisory",
+        action="store_true",
+        help="Return success for valid WARN/FAIL reports while preserving output.",
     )
 
     return parser

@@ -1,0 +1,93 @@
+name: Review DNA
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  review-dna:
+    name: Review DNA Advisory Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Collect changed files
+        shell: bash
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          git diff --name-only "origin/${{ github.base_ref }}...HEAD" > changed-files.txt
+          cat changed-files.txt
+
+      - name: Run Review DNA Check
+        shell: bash
+        run: |
+          args=()
+          while IFS= read -r file; do
+            if [ -n "$file" ]; then
+              args+=(--changed-file "$file")
+            fi
+          done < changed-files.txt
+
+          python scripts/review_dna.py check --advisory --json "${args[@]}" > review-dna-check.json
+          cat review-dna-check.json
+
+      - name: Write Review DNA summary
+        shell: python
+        run: |
+          import json
+          import os
+          from pathlib import Path
+
+          result = json.loads(Path("review-dna-check.json").read_text(encoding="utf-8"))
+          lines = [
+              "## Review DNA Advisory Check",
+              "",
+              f"**Status:** {result['status']}",
+              f"**Score:** {result['score']}/100",
+              f"**Changed files:** {len(result['changed_files'])}",
+              "",
+              "### Issues",
+              "",
+          ]
+
+          if result["issues"]:
+              for issue in result["issues"]:
+                  paths = ", ".join(f"`{path}`" for path in issue["paths"])
+                  lines.extend(
+                      [
+                          f"- **{issue['severity']} / {issue['code']}**",
+                          f"  - {issue['message']}",
+                          f"  - Paths: {paths}",
+                          f"  - Recommendation: {issue['recommendation']}",
+                      ]
+                  )
+          else:
+              lines.append("- None")
+
+          lines.extend(["", "### Recommended Commands", ""])
+          if result["recommended_commands"]:
+              lines.extend(f"- `{command}`" for command in result["recommended_commands"])
+          else:
+              lines.append("- None")
+
+          summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          with summary_path.open("a", encoding="utf-8") as summary:
+              summary.write("\n".join(lines))
+              summary.write("\n")
+
+      - name: Upload Review DNA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-dna-check
+          path: review-dna-check.json
