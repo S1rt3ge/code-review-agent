@@ -350,6 +350,7 @@ expected finding recall, unexpected findings, and an overall score.
 python scripts/review_dna.py scan --json
 python scripts/review_dna.py init
 python scripts/review_dna.py instructions
+python scripts/review_dna.py criteria
 python scripts/review_dna.py check
 ```
 
@@ -361,6 +362,10 @@ against the profile and reports a project-fit score, missing spec/test evidence,
 local-first risks, and recommended verification commands. Pull requests also run
 a non-blocking Review DNA workflow that uploads the JSON report and writes the
 same score to the GitHub Actions step summary.
+
+Use `criteria` when generating a Review Passport: it renders paste-ready
+acceptance criteria from `review-dna.yml`, including spec-first evidence,
+required tests, local-demo constraints, and review quality gates.
 
 ### Frontend
 

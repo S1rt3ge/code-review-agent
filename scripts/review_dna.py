@@ -5,6 +5,7 @@ Usage:
     python scripts/review_dna.py init
     python scripts/review_dna.py instructions
     python scripts/review_dna.py check --json
+    python scripts/review_dna.py criteria
 """
 
 from __future__ import annotations
@@ -18,13 +19,16 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.services.review_dna import (  # noqa: E402
+    build_review_dna_criteria_pack,
     build_review_dna_profile,
     detect_changed_files,
     load_review_dna_profile,
     profile_to_json,
+    render_review_dna_criteria_pack,
     render_review_dna_instructions,
     render_review_dna_check_report,
     render_review_dna_summary,
+    review_dna_criteria_pack_to_json,
     review_dna_check_to_json,
     run_review_dna_check,
     write_review_dna_profile,
@@ -80,6 +84,16 @@ def main(argv: list[str] | None = None) -> int:
             if args.advisory:
                 return 0
             return 0 if result.status == "PASS" else 1
+
+        if args.command == "criteria":
+            repo_path = Path(args.repo).expanduser().resolve()
+            profile = _load_or_build_profile(repo_path, args.profile)
+            pack = build_review_dna_criteria_pack(profile)
+            if args.json:
+                print(review_dna_criteria_pack_to_json(pack), end="")
+            else:
+                print(render_review_dna_criteria_pack(pack))
+            return 0
 
     except (FileExistsError, OSError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
@@ -181,6 +195,28 @@ def _build_parser() -> argparse.ArgumentParser:
         "--advisory",
         action="store_true",
         help="Return success for valid WARN/FAIL reports while preserving output.",
+    )
+
+    criteria_parser = subparsers.add_parser(
+        "criteria",
+        help="Render Review Passport-ready criteria from Review DNA.",
+    )
+    criteria_parser.add_argument(
+        "--repo",
+        type=Path,
+        default=PROJECT_ROOT,
+        help="Repository path to scan when --profile is not provided.",
+    )
+    criteria_parser.add_argument(
+        "--profile",
+        type=Path,
+        default=None,
+        help="Existing Review DNA profile file to use.",
+    )
+    criteria_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
     )
 
     return parser
