@@ -38,12 +38,13 @@ Process:
 3. Print the profile as JSON or write `review-dna.yml`.
 4. Generate reviewer instructions that can be pasted into Codex, GitHub PR
    descriptions, CodeRabbit-style tools, or local review prompts.
-5. Later versions can compare a PR diff against the profile and produce a
-   project-fit score.
+5. Compare a local change set against the profile and produce a project-fit
+   score before the change reaches PR review.
 
 User-visible outcome:
 
 - one local command explains how to review the repo
+- one local command checks whether the current change respects that review DNA
 - no GitHub token, SMTP provider, database, or LLM key is required
 - the output becomes a portable proof artifact for the project
 
@@ -141,9 +142,11 @@ MVP:
 
 v0.4:
 
-- Compare a local diff against `review-dna.yml`.
-- Produce a project-fit score and missing-evidence list.
-- Add a README section and release note.
+- Commit a portable `review-dna.yml` with `source_root: "."`.
+- Add `check` command that evaluates changed files against Review DNA.
+- Produce a project-fit score, status, issues, and recommended commands.
+- Keep the check advisory and local-only so a solo developer is not blocked by
+  remote branch protection while iterating.
 
 v0.5:
 
@@ -155,6 +158,8 @@ Metrics:
 
 - CLI runs in under 2 seconds on the repo.
 - Generated profile includes at least 5 evidence sources.
+- Check output explains at least 3 common risks: missing spec, missing tests,
+  and local-first regression risk.
 - Tests remain deterministic and require no external services.
 - New contributors can run profile generation from a fresh clone.
 
@@ -166,11 +171,13 @@ Metrics:
 | YAML output drifts from repo state | Medium | Regenerate via CLI and keep source fields explicit |
 | CLI overwrites user edits | Low | Refuse overwrite unless `--force` is passed |
 | Scope grows into another review engine | Medium | Keep MVP limited to profile and instructions |
+| Check blocks a solo maintainer unnecessarily | Medium | Make CLI advisory in MVP, with explicit status and score |
+| Static file checks miss semantic intent | Medium | Phrase output as project-fit evidence, not proof of correctness |
 | Generated instructions expose secrets | Low | Only read file names and curated docs, never `.env` values |
 
 ## 10. Technical Details
 
-The first implementation is local-only Python:
+The implementation is local-only Python:
 
 - no database migrations
 - no HTTP endpoints
@@ -184,6 +191,15 @@ ignore heavy/generated directories such as `.git`, `.pytest_cache`,
 
 The CLI must return:
 
-- exit code `0` for successful scan/init/instructions
+- exit code `0` for successful scan/init/instructions/check execution
 - exit code `2` for invalid input, missing profile file, or safe overwrite block
+
+`check` is advisory in the first version. It reads changed file paths from git or
+from explicit `--changed-file` arguments, then applies deterministic rules:
+
+- application code changes without tests reduce project-fit score
+- behavior changes without spec/idea docs reduce project-fit score
+- auth, provider, Docker, settings, or local demo changes require local-first
+  evidence
+- review analyzer/passport/DNA changes recommend review quality evals
 

@@ -8,6 +8,8 @@ import pytest
 from backend.services.review_dna import (
     build_review_dna_profile,
     render_review_dna_instructions,
+    render_review_dna_check_report,
+    run_review_dna_check,
     write_review_dna_profile,
 )
 from scripts.review_dna import main as review_dna_main
@@ -19,6 +21,7 @@ def test_build_review_dna_profile_detects_project_evidence(tmp_path: Path) -> No
     profile = build_review_dna_profile(repo)
 
     assert profile.project_name == repo.name
+    assert profile.source_root == "."
     assert profile.stacks == ("docker", "github-actions", "python", "react-vite")
 
     evidence_paths = {source.path for source in profile.evidence_sources}
@@ -67,6 +70,7 @@ def test_write_review_dna_profile_refuses_overwrite_without_force(
 
     first_payload = output_path.read_text(encoding="utf-8")
     assert '"project_name"' in first_payload
+    assert '"source_root": "."' in first_payload
     assert '"quality_gates"' in first_payload
 
     with pytest.raises(FileExistsError, match="already exists"):
@@ -111,6 +115,146 @@ def test_review_dna_cli_init_blocks_existing_output(
     assert second_exit_code == 2
     assert output_path.exists()
     assert "already exists" in captured.err
+
+
+def test_review_dna_check_passes_for_docs_only_change(tmp_path: Path) -> None:
+    repo = _make_review_dna_repo(tmp_path)
+    profile = build_review_dna_profile(repo)
+
+    result = run_review_dna_check(
+        profile,
+        changed_files=["docs/REVIEW_DNA_CLI_SPEC.md"],
+    )
+
+    assert result.status == "PASS"
+    assert result.score == 100
+    assert result.issues == ()
+    assert result.recommended_commands == ()
+
+
+def test_review_dna_check_ignores_binary_reference_assets(tmp_path: Path) -> None:
+    repo = _make_review_dna_repo(tmp_path)
+    profile = build_review_dna_profile(repo)
+
+    result = run_review_dna_check(
+        profile,
+        changed_files=["methodology.pdf"],
+    )
+
+    assert result.status == "PASS"
+    assert result.score == 100
+    assert result.changed_files == ()
+    assert result.issues == ()
+
+
+def test_review_dna_check_flags_code_without_spec_or_tests(tmp_path: Path) -> None:
+    repo = _make_review_dna_repo(tmp_path)
+    profile = build_review_dna_profile(repo)
+
+    result = run_review_dna_check(
+        profile,
+        changed_files=["backend/services/new_feature.py"],
+    )
+
+    assert result.status == "FAIL"
+    assert result.score == 50
+    assert {issue.code for issue in result.issues} == {
+        "missing_spec_evidence",
+        "missing_test_evidence",
+    }
+    assert 'python -m pytest -m "not integration" --tb=short -q' in (
+        result.recommended_commands
+    )
+    assert "python -m ruff check backend" in result.recommended_commands
+
+
+def test_review_dna_check_recommends_eval_for_review_logic_change(
+    tmp_path: Path,
+) -> None:
+    repo = _make_review_dna_repo(tmp_path)
+    profile = build_review_dna_profile(repo)
+
+    result = run_review_dna_check(
+        profile,
+        changed_files=[
+            "backend/services/review_dna.py",
+            "backend/tests/test_review_dna.py",
+            "docs/REVIEW_DNA_CLI_SPEC.md",
+        ],
+    )
+
+    assert result.status == "PASS"
+    assert result.score == 100
+    assert result.issues == ()
+    assert "python scripts/evaluate_review_quality.py" in result.recommended_commands
+
+
+def test_review_dna_check_flags_local_first_risk_without_evidence(
+    tmp_path: Path,
+) -> None:
+    repo = _make_review_dna_repo(tmp_path)
+    profile = build_review_dna_profile(repo)
+
+    result = run_review_dna_check(
+        profile,
+        changed_files=[
+            "backend/config.py",
+            "backend/tests/test_config.py",
+            "docs/REVIEW_DNA_CLI_SPEC.md",
+        ],
+    )
+
+    assert result.status == "WARN"
+    assert result.score == 85
+    assert [issue.code for issue in result.issues] == ["local_first_evidence"]
+    assert "AUTH_REQUIRE_EMAIL_VERIFICATION" in result.issues[0].recommendation
+
+
+def test_render_review_dna_check_report_includes_status_and_issues(
+    tmp_path: Path,
+) -> None:
+    repo = _make_review_dna_repo(tmp_path)
+    profile = build_review_dna_profile(repo)
+    result = run_review_dna_check(
+        profile,
+        changed_files=["frontend/src/pages/NewPage.jsx"],
+    )
+
+    rendered = render_review_dna_check_report(result)
+
+    assert "Review DNA Check" in rendered
+    assert "Status: FAIL" in rendered
+    assert "missing_spec_evidence" in rendered
+    assert "missing_test_evidence" in rendered
+
+
+def test_review_dna_cli_check_outputs_json_for_explicit_changed_files(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _make_review_dna_repo(tmp_path)
+
+    exit_code = review_dna_main(
+        [
+            "check",
+            "--repo",
+            str(repo),
+            "--changed-file",
+            "backend/services/new_feature.py",
+            "--json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 1
+    assert payload["status"] == "FAIL"
+    assert payload["score"] == 50
+    assert {issue["code"] for issue in payload["issues"]} == {
+        "missing_spec_evidence",
+        "missing_test_evidence",
+    }
+    assert captured.err == ""
 
 
 def _make_review_dna_repo(path: Path) -> Path:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -75,6 +76,46 @@ class ReviewDNAProfile:
         }
 
 
+@dataclass(frozen=True)
+class ReviewDNACheckIssue:
+    """Project-fit issue detected from changed file paths."""
+
+    code: str
+    severity: str
+    message: str
+    paths: tuple[str, ...]
+    recommendation: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "code": self.code,
+            "severity": self.severity,
+            "message": self.message,
+            "paths": list(self.paths),
+            "recommendation": self.recommendation,
+        }
+
+
+@dataclass(frozen=True)
+class ReviewDNACheckResult:
+    """Advisory project-fit result for a local change set."""
+
+    status: str
+    score: int
+    changed_files: tuple[str, ...]
+    issues: tuple[ReviewDNACheckIssue, ...]
+    recommended_commands: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "score": self.score,
+            "changed_files": list(self.changed_files),
+            "issues": [issue.to_dict() for issue in self.issues],
+            "recommended_commands": list(self.recommended_commands),
+        }
+
+
 def build_review_dna_profile(repo_path: str | Path) -> ReviewDNAProfile:
     """Build a deterministic Review DNA profile for a local repository."""
     root = _resolve_repo_path(repo_path)
@@ -87,7 +128,7 @@ def build_review_dna_profile(repo_path: str | Path) -> ReviewDNAProfile:
     return ReviewDNAProfile(
         project_name=root.name,
         generated_by=GENERATED_BY,
-        source_root=str(root),
+        source_root=".",
         stacks=tuple(stacks),
         evidence_sources=tuple(evidence_sources),
         quality_gates=tuple(quality_gates),
@@ -177,9 +218,69 @@ def render_review_dna_instructions(profile: ReviewDNAProfile) -> str:
     return "\n".join(lines)
 
 
+def run_review_dna_check(
+    profile: ReviewDNAProfile,
+    changed_files: list[str] | tuple[str, ...],
+) -> ReviewDNACheckResult:
+    """Evaluate changed files against project-specific Review DNA rules."""
+    normalized_paths = tuple(_normalize_changed_files(changed_files))
+    issues = _build_check_issues(normalized_paths)
+    score = _score_check_issues(issues)
+    recommended_commands = _recommended_commands(profile, normalized_paths)
+    status = _check_status(score, issues)
+
+    return ReviewDNACheckResult(
+        status=status,
+        score=score,
+        changed_files=normalized_paths,
+        issues=tuple(issues),
+        recommended_commands=tuple(recommended_commands),
+    )
+
+
+def render_review_dna_check_report(result: ReviewDNACheckResult) -> str:
+    """Render a terminal-friendly Review DNA check report."""
+    lines = [
+        "Review DNA Check",
+        "================",
+        f"Status: {result.status}",
+        f"Score: {result.score}/100",
+        f"Changed files: {len(result.changed_files)}",
+        "",
+    ]
+
+    if result.changed_files:
+        lines.append("Files:")
+        lines.extend(f"- {path}" for path in result.changed_files)
+        lines.append("")
+
+    if result.issues:
+        lines.append("Issues:")
+        for issue in result.issues:
+            lines.append(f"- [{issue.severity}] {issue.code}: {issue.message}")
+            lines.append(f"  Recommendation: {issue.recommendation}")
+        lines.append("")
+    else:
+        lines.append("Issues: none")
+        lines.append("")
+
+    if result.recommended_commands:
+        lines.append("Recommended commands:")
+        lines.extend(f"- {command}" for command in result.recommended_commands)
+    else:
+        lines.append("Recommended commands: none")
+
+    return "\n".join(lines)
+
+
 def profile_to_json(profile: ReviewDNAProfile) -> str:
     """Serialize a profile to deterministic JSON."""
     return json.dumps(profile.to_dict(), indent=2, sort_keys=True) + "\n"
+
+
+def review_dna_check_to_json(result: ReviewDNACheckResult) -> str:
+    """Serialize a check result to deterministic JSON."""
+    return json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n"
 
 
 def write_review_dna_profile(
@@ -206,6 +307,32 @@ def load_review_dna_profile(profile_path: str | Path) -> ReviewDNAProfile:
 
     payload = json.loads(path.read_text(encoding="utf-8"))
     return _profile_from_dict(payload)
+
+
+def detect_changed_files(repo_path: str | Path) -> list[str]:
+    """Read changed file paths from local git status."""
+    root = _resolve_repo_path(repo_path)
+    result = subprocess.run(
+        ["git", "-C", str(root), "status", "--short", "--untracked-files=normal"],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "git status failed"
+        raise ValueError(detail)
+
+    paths: list[str] = []
+    for raw_line in result.stdout.splitlines():
+        if len(raw_line) < 4:
+            continue
+        path = raw_line[3:].strip()
+        if " -> " in path:
+            path = path.rsplit(" -> ", maxsplit=1)[-1].strip()
+        if path:
+            paths.append(path.strip('"'))
+
+    return _normalize_changed_files(paths)
 
 
 def _resolve_repo_path(repo_path: str | Path) -> Path:
@@ -365,6 +492,224 @@ def _default_review_rules(root: Path) -> list[str]:
             "Review logic changes should preserve Review Passport and Anti-AI-Slop evidence."
         )
     return rules
+
+
+def _build_check_issues(paths: tuple[str, ...]) -> list[ReviewDNACheckIssue]:
+    issues: list[ReviewDNACheckIssue] = []
+    code_paths = [path for path in paths if _is_application_code_path(path)]
+    local_risk_paths = [path for path in paths if _is_local_first_risk_path(path)]
+
+    if code_paths and not any(_is_test_evidence_path(path) for path in paths):
+        issues.append(
+            ReviewDNACheckIssue(
+                code="missing_test_evidence",
+                severity="high",
+                message="Application code changed without matching test evidence.",
+                paths=tuple(code_paths),
+                recommendation=(
+                    "Add or update backend, frontend, eval, or integration tests "
+                    "that prove the changed behavior."
+                ),
+            )
+        )
+
+    if code_paths and not any(_is_spec_or_idea_path(path) for path in paths):
+        issues.append(
+            ReviewDNACheckIssue(
+                code="missing_spec_evidence",
+                severity="high",
+                message="Application code changed without spec-first evidence.",
+                paths=tuple(code_paths),
+                recommendation=(
+                    "Update a feature spec or idea document before relying on "
+                    "implementation details."
+                ),
+            )
+        )
+
+    has_local_first_evidence = any(
+        _is_local_first_evidence_path(path) for path in paths
+    )
+    if local_risk_paths and not has_local_first_evidence:
+        issues.append(
+            ReviewDNACheckIssue(
+                code="local_first_evidence",
+                severity="medium",
+                message="Local-first sensitive files changed without local demo evidence.",
+                paths=tuple(local_risk_paths),
+                recommendation=(
+                    "Document or test the no-paid-services path, including "
+                    "AUTH_REQUIRE_EMAIL_VERIFICATION=false when auth is affected."
+                ),
+            )
+        )
+
+    return issues
+
+
+def _score_check_issues(issues: list[ReviewDNACheckIssue]) -> int:
+    penalties = {"high": 25, "medium": 15, "low": 5}
+    score = 100 - sum(penalties.get(issue.severity, 0) for issue in issues)
+    return max(score, 0)
+
+
+def _check_status(score: int, issues: list[ReviewDNACheckIssue]) -> str:
+    if any(issue.severity == "high" for issue in issues) or score < 70:
+        return "FAIL"
+    if issues or score < 90:
+        return "WARN"
+    return "PASS"
+
+
+def _recommended_commands(profile: ReviewDNAProfile, paths: tuple[str, ...]) -> list[str]:
+    wanted: set[str] = set()
+    if any(_is_backend_or_script_path(path) for path in paths):
+        wanted.add('python -m pytest -m "not integration" --tb=short -q')
+        wanted.add("python -m ruff check backend")
+    if any(path.startswith("frontend/") for path in paths):
+        wanted.add("cd frontend && npm test -- --run && npm run build")
+    if any(_is_review_logic_path(path) for path in paths):
+        wanted.add("python scripts/evaluate_review_quality.py")
+    if any(_is_local_stack_path(path) for path in paths):
+        wanted.add("docker compose up --build")
+
+    ordered = [
+        gate.command for gate in profile.quality_gates if gate.command in wanted
+    ]
+    return ordered
+
+
+def _normalize_changed_files(paths: list[str] | tuple[str, ...]) -> list[str]:
+    normalized: set[str] = set()
+    for path in paths:
+        cleaned = str(path).replace("\\", "/").strip().strip('"')
+        if not cleaned:
+            continue
+        while cleaned.startswith("./"):
+            cleaned = cleaned[2:]
+        if _is_generated_or_cache_path(cleaned):
+            continue
+        normalized.add(cleaned)
+    return sorted(normalized)
+
+
+def _is_generated_or_cache_path(path: str) -> bool:
+    blocked_parts = {
+        ".git",
+        ".pytest_cache",
+        ".ruff_cache",
+        "__pycache__",
+        "node_modules",
+        "dist",
+    }
+    ignored_suffixes = (
+        ".gif",
+        ".ico",
+        ".jpeg",
+        ".jpg",
+        ".pdf",
+        ".png",
+        ".webp",
+        ".zip",
+    )
+    has_blocked_part = any(part in blocked_parts for part in path.split("/"))
+    has_ignored_suffix = path.lower().endswith(ignored_suffixes)
+    return has_blocked_part or has_ignored_suffix
+
+
+def _is_application_code_path(path: str) -> bool:
+    if _is_test_evidence_path(path) or _is_spec_or_idea_path(path):
+        return False
+    if path.startswith("backend/") and path.endswith(".py"):
+        return True
+    if path.startswith("frontend/src/") and _is_frontend_code_file(path):
+        return True
+    return path.startswith("scripts/") and path.endswith(".py")
+
+
+def _is_backend_or_script_path(path: str) -> bool:
+    return (
+        path.startswith("backend/")
+        or path.startswith("scripts/")
+        or path in {"requirements.txt", "requirements.in"}
+    )
+
+
+def _is_frontend_code_file(path: str) -> bool:
+    return path.endswith((".js", ".jsx", ".css"))
+
+
+def _is_test_evidence_path(path: str) -> bool:
+    name = Path(path).name.lower()
+    return (
+        path.startswith("backend/tests/")
+        or path.startswith("evals/")
+        or ".test." in name
+        or ".spec." in name
+        or name.startswith("test_")
+    )
+
+
+def _is_spec_or_idea_path(path: str) -> bool:
+    name = Path(path).name.lower()
+    return (
+        path in {"PROJECT_IDEA.md", "TECHNICAL_SPEC.md", "SPEC_TEMPLATE.md"}
+        or path.startswith("docs/")
+        and ("spec" in name or "idea" in name)
+    )
+
+
+def _is_local_first_risk_path(path: str) -> bool:
+    lower_path = path.lower()
+    risky_tokens = (
+        "auth",
+        "config",
+        "docker",
+        "email",
+        "github",
+        "llm",
+        "notification",
+        "ollama",
+        "provider",
+        "settings",
+        "webhook",
+    )
+    return (
+        path in {"Dockerfile", "docker-compose.yml", ".env.example"}
+        or lower_path.startswith(".github/")
+        or any(token in lower_path for token in risky_tokens)
+    )
+
+
+def _is_local_first_evidence_path(path: str) -> bool:
+    lower_path = path.lower()
+    return (
+        path == "README.md"
+        or lower_path == "docs/local-demo.md"
+        or "local_demo" in lower_path
+        or "local-demo" in lower_path
+        or "first_run" in lower_path
+        or "first-run" in lower_path
+    )
+
+
+def _is_review_logic_path(path: str) -> bool:
+    if path.startswith("docs/"):
+        return False
+
+    lower_path = path.lower()
+    review_tokens = (
+        "playground_review",
+        "review_dna",
+        "review_eval",
+        "review_passport",
+        "evaluate_review_quality",
+    )
+    return any(token in lower_path for token in review_tokens)
+
+
+def _is_local_stack_path(path: str) -> bool:
+    return path in {"Dockerfile", "docker-compose.yml", ".env.example"}
 
 
 def _add_source_if_exists(
