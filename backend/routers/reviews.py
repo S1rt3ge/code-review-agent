@@ -14,6 +14,7 @@ Functions:
 import logging
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -28,6 +29,8 @@ from backend.models.schemas import (
     PostCommentResponse,
     PlaygroundDemoReviewRequest,
     PlaygroundDiffReviewRequest,
+    ReviewDNACriteriaPackResponse,
+    ReviewDNACriterionResponse,
     ReviewPassportGateResponse,
     ReviewPassportMarkdownResponse,
     ReviewPassportRequest,
@@ -40,6 +43,10 @@ from backend.services.analysis_queue import enqueue_analysis
 from backend.services.github_api import get_github_client
 from backend.services.playground_review import DEMO_DIFF, create_playground_review
 from backend.services.pr_commenter import build_comment
+from backend.services.review_dna import (
+    build_review_dna_criteria_pack_for_repo,
+    render_review_dna_criteria_pack,
+)
 from backend.services.review_passport_commenter import build_passport_markdown
 from backend.services.review_passport import (
     create_or_replace_review_passport,
@@ -61,6 +68,7 @@ router = APIRouter(prefix="/reviews", tags=["reviews"])
 MAX_PAGE_LIMIT = 100
 DEFAULT_PAGE_LIMIT = 20
 VALID_AGENTS = {"security", "performance", "style", "logic"}
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _validate_agents(agent_names: list[str]) -> list[str]:
@@ -108,6 +116,34 @@ async def _get_review_for_passport(
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/review-dna/criteria-pack",
+    response_model=ReviewDNACriteriaPackResponse,
+)
+async def get_review_dna_criteria_pack(
+    current_user: User = Depends(get_current_user),
+) -> ReviewDNACriteriaPackResponse:
+    """Return Review DNA criteria as Review Passport-ready form input."""
+    try:
+        pack = build_review_dna_criteria_pack_for_repo(PROJECT_ROOT)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Review DNA criteria unavailable: {exc}",
+        ) from exc
+
+    return ReviewDNACriteriaPackResponse(
+        title=pack.title,
+        source_profile=pack.source_profile,
+        spec_source_ref=f"{pack.title} ({pack.source_profile})",
+        markdown=render_review_dna_criteria_pack(pack),
+        criteria=[
+            ReviewDNACriterionResponse(**criterion.to_dict())
+            for criterion in pack.criteria
+        ],
+    )
 
 
 @router.get("", response_model=ReviewListResponse)

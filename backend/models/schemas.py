@@ -408,6 +408,27 @@ class PlaygroundDiffReviewRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class ReviewDNACriterionResponse(BaseModel):
+    """Single Review DNA acceptance criterion for Review Passport import."""
+
+    id: str
+    criterion: str
+    rationale: str
+    evidence: list[str] = Field(default_factory=list)
+    verification: list[str] = Field(default_factory=list)
+
+
+class ReviewDNACriteriaPackResponse(BaseModel):
+    """Review DNA criteria pack rendered for Review Passport input."""
+
+    title: str
+    source_profile: str
+    spec_source_type: str = "review_dna"
+    spec_source_ref: str
+    markdown: str
+    criteria: list[ReviewDNACriterionResponse]
+
+
 class ReviewPassportRequest(BaseModel):
     """Request body for creating or replacing a Review Passport."""
 

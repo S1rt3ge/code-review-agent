@@ -205,6 +205,37 @@ describe('ReviewDetail page', () => {
     })
   })
 
+  it('imports Review DNA criteria into the passport form', async () => {
+    const user = userEvent.setup()
+    const criteriaMarkdown = '# Review DNA Criteria Pack\n\n- [ ] AC-1: Spec-first evidence exists'
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify(REVIEW_RESPONSE), { status: 200 }))
+    fetch.mockResolvedValueOnce(passportNotFoundResponse())
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({
+      title: 'Review DNA Criteria Pack',
+      source_profile: 'code-review-agent',
+      spec_source_type: 'review_dna',
+      spec_source_ref: 'Review DNA Criteria Pack (code-review-agent)',
+      markdown: criteriaMarkdown,
+      criteria: [],
+    }), { status: 200 }))
+
+    renderReviewDetail()
+
+    await screen.findByRole('button', { name: /generate passport/i })
+    await user.click(screen.getByRole('button', { name: /use review dna criteria/i }))
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/acceptance criteria/i).value).toContain(
+        'AC-1: Spec-first evidence exists'
+      )
+    })
+    expect(screen.getByPlaceholderText(/source reference/i).value).toBe(
+      'Review DNA Criteria Pack (code-review-agent)'
+    )
+    expect(fetch.mock.calls[2][0]).toContain('/reviews/review-dna/criteria-pack')
+    expect(fetch.mock.calls[2][1].method).toBe('GET')
+  })
+
   it('copies and deletes an existing review passport', async () => {
     const user = userEvent.setup()
     const writeText = vi.fn().mockResolvedValue(undefined)

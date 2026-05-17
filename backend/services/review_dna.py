@@ -398,6 +398,25 @@ def build_review_dna_criteria_pack(
     )
 
 
+def build_review_dna_criteria_pack_for_repo(
+    repo_path: str | Path,
+    *,
+    profile_path: str | Path | None = None,
+) -> ReviewDNACriteriaPack:
+    """Build Review Passport-ready criteria from a repo profile or live scan."""
+    root = _resolve_repo_path(repo_path)
+    candidate = Path(profile_path) if profile_path else root / "review-dna.yml"
+    if not candidate.is_absolute():
+        candidate = root / candidate
+
+    profile = (
+        load_review_dna_profile(candidate)
+        if candidate.is_file()
+        else build_review_dna_profile(root)
+    )
+    return build_review_dna_criteria_pack(profile)
+
+
 def render_review_dna_criteria_pack(pack: ReviewDNACriteriaPack) -> str:
     """Render Review Passport-ready criteria Markdown."""
     lines = [
