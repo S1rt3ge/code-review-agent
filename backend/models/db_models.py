@@ -367,7 +367,7 @@ class ReviewPassport(Base):
             name="ck_review_passports_mode",
         ),
         CheckConstraint(
-            "spec_source_type IN ('manual', 'local_demo', 'pr_body', 'github_issue')",
+            "spec_source_type IN ('manual', 'local_demo', 'pr_body', 'github_issue', 'review_dna')",
             name="ck_review_passports_spec_source_type",
         ),
         CheckConstraint(

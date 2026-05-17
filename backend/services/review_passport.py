@@ -22,7 +22,13 @@ from backend.services.playground_review import _parse_added_lines, validate_play
 
 
 VALID_PASSPORT_MODES = {"spec_evidence", "anti_ai_slop", "combined"}
-VALID_SPEC_SOURCE_TYPES = {"manual", "local_demo", "pr_body", "github_issue"}
+VALID_SPEC_SOURCE_TYPES = {
+    "manual",
+    "local_demo",
+    "pr_body",
+    "github_issue",
+    "review_dna",
+}
 MAX_SPEC_CHARS = 20_000
 MAX_CRITERIA = 25
 MAX_SNAPSHOT_ADDED_LINES = 2_500

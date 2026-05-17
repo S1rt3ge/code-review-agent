@@ -20,6 +20,7 @@ The user-visible outcome is a `Review Passport` panel on the review detail page 
 - As a developer reviewing AI-generated code, I want anti-slop signals, so that I can catch missing tests, placeholder code, and broad unproven changes.
 - As a local evaluator, I want the passport to work on `Try demo review` and pasted diffs without paid providers, so that the demo remains self-hosted and free.
 - As a user, I want invalid or oversized spec input rejected clearly, so that I can fix the input without database or terminal work.
+- As a dashboard user, I want to generate a Review Passport directly from Review DNA, so that the project methodology is evaluated without manual copy/paste.
 
 ## Data Model
 
@@ -51,7 +52,7 @@ review_passports
 Constraints:
 - `UNIQUE(review_id)`
 - `mode IN ('spec_evidence', 'anti_ai_slop', 'combined')`
-- `spec_source_type IN ('manual', 'local_demo', 'pr_body', 'github_issue')`
+- `spec_source_type IN ('manual', 'local_demo', 'pr_body', 'github_issue', 'review_dna')`
 - `verdict IN ('READY', 'READY_WITH_RISKS', 'BLOCKED')`
 - `confidence_score BETWEEN 0 AND 100`
 
@@ -179,6 +180,31 @@ Errors:
 - `404` review not found.
 - `413` `spec_input` or `code_diff` exceeds limits.
 
+### POST `/api/reviews/{review_id}/passport/review-dna`
+
+Auth: Bearer user JWT.
+
+Creates or replaces the passport for a review using the current Review DNA
+Criteria Pack as `spec_input`.
+
+Body: empty.
+
+Behavior:
+- loads `review-dna.yml` when present, otherwise scans the repository
+- renders the Criteria Pack as Review Passport acceptance criteria
+- sets `mode` to `combined`
+- sets `spec_source_type` to `review_dna`
+- sets `spec_source_ref` to `Review DNA Criteria Pack (<profile>)`
+- uses the stored review diff snapshot; no external provider call is made
+
+Success: `201 Created` with `ReviewPassportResponse`.
+
+Errors:
+- `400` Review DNA criteria cannot be loaded or the review has no diff snapshot.
+- `401` unauthenticated.
+- `403` email verification required or review does not belong to the user.
+- `404` review not found.
+
 ### GET `/api/reviews/{review_id}/passport`
 
 Auth: Bearer user JWT.
@@ -218,6 +244,7 @@ Data:
 
 Actions:
 - `Generate passport`: opens spec input form.
+- `Generate with Review DNA`: creates a passport from repo methodology without filling the form manually.
 - `Regenerate`: replaces existing passport.
 - `Delete`: removes passport after confirmation.
 - `Copy QA script`: copies numbered manual QA steps.

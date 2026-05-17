@@ -1,12 +1,17 @@
 """Tests for Review DNA repository profiling."""
 
 import json
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from backend.routers.reviews import get_review_dna_criteria_pack
+from backend.routers.reviews import (
+    create_review_passport_from_review_dna,
+    get_review_dna_criteria_pack,
+)
 from backend.services.review_dna import (
     build_review_dna_criteria_pack_for_repo,
     build_review_dna_criteria_pack,
@@ -389,6 +394,77 @@ async def test_review_dna_criteria_pack_api_response_uses_passport_markdown(
     assert response.markdown.startswith("# Review DNA Criteria Pack")
     assert response.criteria[0].id == "AC-1"
     assert "spec-first" in response.criteria[0].criterion.lower()
+
+
+@pytest.mark.asyncio
+async def test_review_dna_passport_endpoint_generates_from_pack(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    review_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    captured: dict[str, object] = {}
+
+    async def fake_get_review(session, incoming_review_id, current_user):
+        captured["review_id"] = incoming_review_id
+        captured["current_user_id"] = current_user.id
+        return SimpleNamespace(id=incoming_review_id, findings=[])
+
+    async def fake_create_passport(session, **kwargs):
+        captured.update(kwargs)
+        now = datetime.now(timezone.utc)
+        return SimpleNamespace(
+            id=uuid.uuid4(),
+            review_id=kwargs["review"].id,
+            user_id=kwargs["current_user"].id,
+            mode=kwargs["mode"],
+            spec_source_type=kwargs["spec_source_type"],
+            spec_source_ref=kwargs["spec_source_ref"],
+            spec_input=kwargs["spec_input"],
+            spec_digest="digest",
+            verdict="READY_WITH_RISKS",
+            confidence_score=88,
+            coverage_summary=[{"criterion_id": "AC-1", "status": "covered"}],
+            anti_slop_signals=[],
+            qa_steps=[],
+            missing_evidence=[],
+            github_comment_id=None,
+            github_comment_url=None,
+            github_comment_posted_at=None,
+            github_gate_state=None,
+            github_gate_url=None,
+            github_gate_posted_at=None,
+            generated_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+
+    monkeypatch.setattr("backend.routers.reviews._get_review_for_passport", fake_get_review)
+    monkeypatch.setattr(
+        "backend.routers.reviews._review_dna_pack_payload",
+        lambda: (
+            "Review DNA Criteria Pack",
+            "code-review-agent",
+            "Review DNA Criteria Pack (code-review-agent)",
+            "# Review DNA Criteria Pack\n\n- [ ] AC-1: Spec-first evidence exists",
+            [],
+        ),
+    )
+    monkeypatch.setattr(
+        "backend.routers.reviews.create_or_replace_review_passport",
+        fake_create_passport,
+    )
+
+    response = await create_review_passport_from_review_dna(
+        review_id,
+        session=SimpleNamespace(),
+        current_user=SimpleNamespace(id=user_id),
+    )
+
+    assert response.spec_source_type == "review_dna"
+    assert response.spec_source_ref == "Review DNA Criteria Pack (code-review-agent)"
+    assert "Review DNA Criteria Pack" in response.spec_input
+    assert captured["mode"] == "combined"
+    assert captured["code_diff"] is None
 
 
 def test_review_dna_workflow_is_advisory() -> None:

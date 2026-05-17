@@ -48,6 +48,9 @@ The user-visible outcome is:
 - As a dashboard user, I want to import the current Review DNA Criteria Pack
   into Review Passport with one click, so that local methodology is used without
   terminal copy/paste.
+- As a dashboard user, I want to generate a Review Passport directly from
+  Review DNA, so that I can get a methodology-backed verdict without touching
+  the criteria textarea.
 - As a portfolio reviewer, I want the criteria pack to show evidence sources and
   verification commands, so that the project standards look concrete rather than
   aspirational.
@@ -293,6 +296,10 @@ Review Passport panel:
 - Clicking it fetches `/api/reviews/review-dna/criteria-pack`.
 - Success fills the source reference and acceptance criteria fields.
 - Failure shows an inline error and preserves any manually typed criteria.
+- Empty passport state also includes `Generate with Review DNA`.
+- Clicking it posts to `/api/reviews/{review_id}/passport/review-dna`.
+- Success renders the generated passport immediately.
+- Failure shows an inline error without clearing manually typed criteria.
 
 Terminal states:
 
@@ -412,6 +419,7 @@ Rollout order:
 12. Add Review DNA Criteria Pack CLI output for Review Passport.
 13. Upload Review DNA Criteria Pack artifacts from the advisory workflow.
 14. Add dashboard API/UI import for the Review DNA Criteria Pack.
+15. Add direct Review DNA passport generation from the dashboard.
 
 Dependencies:
 
