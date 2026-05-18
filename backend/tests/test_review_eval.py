@@ -7,6 +7,7 @@ import pytest
 
 from backend.services.review_eval import (
     ExpectedFinding,
+    ExpectedPassportSignal,
     ReviewEvalCase,
     load_eval_cases,
     run_review_quality_eval,
@@ -19,10 +20,72 @@ def test_bundled_review_quality_evals_pass() -> None:
     report = run_review_quality_eval(cases)
 
     assert report.passed is True
-    assert report.cases_total == 6
-    assert report.cases_passed == 6
+    assert report.cases_total == 9
+    assert report.cases_passed == 9
     assert report.expected_recall == 1.0
+    assert report.passport_signals_expected_total == 3
+    assert report.passport_signal_recall == 1.0
     assert report.unexpected_findings == 0
+    assert report.unexpected_passport_signals == 0
+
+
+def test_eval_report_matches_expected_passport_signal() -> None:
+    diff = """diff --git a/app/routes.py b/app/routes.py
+--- a/app/routes.py
++++ b/app/routes.py
+@@ -1,2 +1,4 @@
++@app.post("/reviews")
++async def create_review(code_diff: str):
+diff --git a/app/routes_test.py b/app/routes_test.py
+--- a/app/routes_test.py
++++ b/app/routes_test.py
+@@ -1,2 +1,4 @@
++def test_create_review_limits_input():
++    assert True
+"""
+    case = ReviewEvalCase(
+        id="passport-unbounded-input",
+        title="Detect unbounded passport input signal",
+        code_diff=diff,
+        selected_agents=(),
+        expected_findings=(),
+        expected_passport_signals=(
+            ExpectedPassportSignal(signal_type="unbounded_input", severity="medium"),
+        ),
+    )
+
+    report = run_review_quality_eval([case])
+
+    assert report.passed is True
+    assert report.passport_signals_expected_total == 1
+    assert report.passport_signal_recall == 1.0
+    assert report.case_results[0].matched_passport_signals[0].actual["type"] == "unbounded_input"
+
+
+def test_eval_report_fails_when_expected_passport_signal_is_missing() -> None:
+    diff = """diff --git a/app/routes.py b/app/routes.py
+--- a/app/routes.py
++++ b/app/routes.py
+@@ -1,2 +1,4 @@
++@app.get("/health")
++async def health():
+"""
+    case = ReviewEvalCase(
+        id="missing-passport-signal",
+        title="Missing expected passport signal",
+        code_diff=diff,
+        selected_agents=(),
+        expected_findings=(),
+        expected_passport_signals=(
+            ExpectedPassportSignal(signal_type="unbounded_input", severity="medium"),
+        ),
+    )
+
+    report = run_review_quality_eval([case])
+
+    assert report.passed is False
+    assert report.passport_signal_recall == 0.0
+    assert report.case_results[0].missing_passport_signals[0].signal_type == "unbounded_input"
 
 
 def test_eval_report_fails_when_expected_finding_is_missing() -> None:

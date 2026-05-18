@@ -12,6 +12,10 @@ from backend.services.playground_review import (
     analyze_diff_locally,
     validate_playground_diff,
 )
+from backend.services.review_passport import (
+    detect_anti_slop_signals,
+    snapshot_diff,
+)
 
 
 @dataclass(frozen=True)
@@ -39,6 +43,20 @@ class ExpectedFinding:
 
 
 @dataclass(frozen=True)
+class ExpectedPassportSignal:
+    """Expected Review Passport anti-slop signal descriptor from an eval case."""
+
+    signal_type: str
+    severity: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = {"type": self.signal_type}
+        if self.severity is not None:
+            payload["severity"] = self.severity
+        return payload
+
+
+@dataclass(frozen=True)
 class ReviewEvalCase:
     """Single deterministic review quality eval case."""
 
@@ -47,7 +65,9 @@ class ReviewEvalCase:
     code_diff: str
     selected_agents: tuple[str, ...]
     expected_findings: tuple[ExpectedFinding, ...]
+    expected_passport_signals: tuple[ExpectedPassportSignal, ...] = ()
     max_unexpected_findings: int = 0
+    max_unexpected_passport_signals: int = 0
 
 
 @dataclass(frozen=True)
@@ -65,6 +85,20 @@ class MatchedFinding:
 
 
 @dataclass(frozen=True)
+class MatchedPassportSignal:
+    """Expected passport signal matched to an actual anti-slop signal."""
+
+    expected: ExpectedPassportSignal
+    actual: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "expected": self.expected.to_dict(),
+            "actual": self.actual,
+        }
+
+
+@dataclass(frozen=True)
 class CaseEvalResult:
     """Result for one eval case."""
 
@@ -72,12 +106,18 @@ class CaseEvalResult:
     matched_expected: tuple[MatchedFinding, ...]
     missing_expected: tuple[ExpectedFinding, ...]
     unexpected_actual: tuple[LocalFinding, ...]
+    matched_passport_signals: tuple[MatchedPassportSignal, ...] = ()
+    missing_passport_signals: tuple[ExpectedPassportSignal, ...] = ()
+    unexpected_passport_signals: tuple[dict[str, Any], ...] = ()
 
     @property
     def passed(self) -> bool:
         return (
             not self.missing_expected
+            and not self.missing_passport_signals
             and len(self.unexpected_actual) <= self.case.max_unexpected_findings
+            and len(self.unexpected_passport_signals)
+            <= self.case.max_unexpected_passport_signals
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -95,7 +135,17 @@ class CaseEvalResult:
             "unexpected_actual": [
                 _finding_to_dict(finding) for finding in self.unexpected_actual
             ],
+            "matched_passport_signals": [
+                matched.to_dict() for matched in self.matched_passport_signals
+            ],
+            "missing_passport_signals": [
+                expected.to_dict() for expected in self.missing_passport_signals
+            ],
+            "unexpected_passport_signals": list(self.unexpected_passport_signals),
             "max_unexpected_findings": self.case.max_unexpected_findings,
+            "max_unexpected_passport_signals": (
+                self.case.max_unexpected_passport_signals
+            ),
         }
 
 
@@ -130,8 +180,33 @@ class ReviewEvalReport:
         return self.expected_matched / self.expected_total
 
     @property
+    def passport_signals_expected_total(self) -> int:
+        return sum(
+            len(result.case.expected_passport_signals)
+            for result in self.case_results
+        )
+
+    @property
+    def passport_signals_matched(self) -> int:
+        return sum(
+            len(result.matched_passport_signals) for result in self.case_results
+        )
+
+    @property
+    def passport_signal_recall(self) -> float:
+        if self.passport_signals_expected_total == 0:
+            return 1.0
+        return self.passport_signals_matched / self.passport_signals_expected_total
+
+    @property
     def unexpected_findings(self) -> int:
         return sum(len(result.unexpected_actual) for result in self.case_results)
+
+    @property
+    def unexpected_passport_signals(self) -> int:
+        return sum(
+            len(result.unexpected_passport_signals) for result in self.case_results
+        )
 
     @property
     def case_pass_rate(self) -> float:
@@ -141,7 +216,18 @@ class ReviewEvalReport:
 
     @property
     def score(self) -> float:
-        return round(((self.case_pass_rate + self.expected_recall) / 2) * 100, 1)
+        return round(
+            (
+                (
+                    self.case_pass_rate
+                    + self.expected_recall
+                    + self.passport_signal_recall
+                )
+                / 3
+            )
+            * 100,
+            1,
+        )
 
     @property
     def passed(self) -> bool:
@@ -158,7 +244,11 @@ class ReviewEvalReport:
             "expected_total": self.expected_total,
             "expected_matched": self.expected_matched,
             "expected_recall": self.expected_recall,
+            "passport_signals_expected_total": self.passport_signals_expected_total,
+            "passport_signals_matched": self.passport_signals_matched,
+            "passport_signal_recall": self.passport_signal_recall,
             "unexpected_findings": self.unexpected_findings,
+            "unexpected_passport_signals": self.unexpected_passport_signals,
             "case_results": [result.to_dict() for result in self.case_results],
         }
 
@@ -205,7 +295,14 @@ def format_review_eval_report(report: ReviewEvalReport) -> str:
             f"{report.expected_matched}/{report.expected_total} "
             f"({recall_percent:.1f}%)"
         ),
+        (
+            "Passport signal recall: "
+            f"{report.passport_signals_matched}/"
+            f"{report.passport_signals_expected_total} "
+            f"({report.passport_signal_recall * 100:.1f}%)"
+        ),
         f"Unexpected findings: {report.unexpected_findings}",
+        f"Unexpected passport signals: {report.unexpected_passport_signals}",
         f"Score: {report.score:.1f}/100",
         "",
     ]
@@ -228,14 +325,27 @@ def format_review_eval_report(report: ReviewEvalReport) -> str:
                 f" at {unexpected.file_path}:{unexpected.line_number}"
             )
 
+        for missing in result.missing_passport_signals:
+            lines.append(f"  missing passport signal: {missing.signal_type}")
+
+        for unexpected in result.unexpected_passport_signals:
+            lines.append(
+                "  unexpected passport signal: "
+                f"{unexpected.get('type', 'unknown')}"
+            )
+
     return "\n".join(lines)
 
 
 def _evaluate_case(case: ReviewEvalCase) -> CaseEvalResult:
     actual_findings = analyze_diff_locally(case.code_diff, list(case.selected_agents))
+    actual_signals = _detect_case_passport_signals(case)
     unmatched_actual = list(actual_findings)
+    unmatched_signals = list(actual_signals)
     matched: list[MatchedFinding] = []
     missing: list[ExpectedFinding] = []
+    matched_signals: list[MatchedPassportSignal] = []
+    missing_signals: list[ExpectedPassportSignal] = []
 
     for expected in case.expected_findings:
         match_index = _find_match_index(expected, unmatched_actual)
@@ -250,11 +360,27 @@ def _evaluate_case(case: ReviewEvalCase) -> CaseEvalResult:
             )
         )
 
+    for expected in case.expected_passport_signals:
+        match_index = _find_signal_match_index(expected, unmatched_signals)
+        if match_index is None:
+            missing_signals.append(expected)
+            continue
+
+        matched_signals.append(
+            MatchedPassportSignal(
+                expected=expected,
+                actual=unmatched_signals.pop(match_index),
+            )
+        )
+
     return CaseEvalResult(
         case=case,
         matched_expected=tuple(matched),
         missing_expected=tuple(missing),
         unexpected_actual=tuple(unmatched_actual),
+        matched_passport_signals=tuple(matched_signals),
+        missing_passport_signals=tuple(missing_signals),
+        unexpected_passport_signals=tuple(unmatched_signals),
     )
 
 
@@ -266,6 +392,16 @@ def _find_match_index(
         if _matches_expected(expected, actual):
             return index
     return None
+
+
+def _detect_case_passport_signals(case: ReviewEvalCase) -> list[dict[str, Any]]:
+    if not case.expected_passport_signals:
+        return []
+    snapshot = snapshot_diff(case.code_diff)
+    return detect_anti_slop_signals(
+        snapshot["changed_files"],
+        snapshot["added_lines"],
+    )
 
 
 def _matches_expected(expected: ExpectedFinding, actual: LocalFinding) -> bool:
@@ -280,6 +416,27 @@ def _matches_expected(expected: ExpectedFinding, actual: LocalFinding) -> bool:
     return not (expected.severity is not None and actual.severity != expected.severity)
 
 
+def _find_signal_match_index(
+    expected: ExpectedPassportSignal,
+    actual_signals: list[dict[str, Any]],
+) -> int | None:
+    for index, actual in enumerate(actual_signals):
+        if _matches_signal_expected(expected, actual):
+            return index
+    return None
+
+
+def _matches_signal_expected(
+    expected: ExpectedPassportSignal,
+    actual: dict[str, Any],
+) -> bool:
+    if actual.get("type") != expected.signal_type:
+        return False
+    return not (
+        expected.severity is not None and actual.get("severity") != expected.severity
+    )
+
+
 def _case_from_mapping(raw: Any, context: str) -> ReviewEvalCase:
     mapping = _require_mapping(raw, context)
     case_id = _require_str(mapping, "id", context)
@@ -292,15 +449,33 @@ def _case_from_mapping(raw: Any, context: str) -> ReviewEvalCase:
             _optional_list(mapping, "expected_findings", context)
         )
     )
+    expected_passport_signals = tuple(
+        _expected_signal_from_mapping(
+            raw_expected,
+            f"{context}.expected_passport_signals[{index}]",
+        )
+        for index, raw_expected in enumerate(
+            _optional_list(mapping, "expected_passport_signals", context)
+        )
+    )
     max_unexpected_findings = _optional_non_negative_int(
         mapping,
         "max_unexpected_findings",
         context,
         default=0,
     )
+    max_unexpected_passport_signals = _optional_non_negative_int(
+        mapping,
+        "max_unexpected_passport_signals",
+        context,
+        default=0,
+    )
 
-    if not selected_agents:
-        raise ValueError(f"{context}.selected_agents must contain at least one agent")
+    if not selected_agents and not expected_passport_signals:
+        raise ValueError(
+            f"{context}.selected_agents must contain at least one agent "
+            "unless expected_passport_signals are provided"
+        )
 
     return ReviewEvalCase(
         id=case_id,
@@ -308,7 +483,9 @@ def _case_from_mapping(raw: Any, context: str) -> ReviewEvalCase:
         code_diff=code_diff,
         selected_agents=selected_agents,
         expected_findings=expected_findings,
+        expected_passport_signals=expected_passport_signals,
         max_unexpected_findings=max_unexpected_findings,
+        max_unexpected_passport_signals=max_unexpected_passport_signals,
     )
 
 
@@ -319,6 +496,14 @@ def _expected_from_mapping(raw: Any, context: str) -> ExpectedFinding:
         finding_type=_require_str(mapping, "finding_type", context),
         file_path=_optional_str(mapping, "file_path", context),
         line_number=_optional_int(mapping, "line_number", context),
+        severity=_optional_str(mapping, "severity", context),
+    )
+
+
+def _expected_signal_from_mapping(raw: Any, context: str) -> ExpectedPassportSignal:
+    mapping = _require_mapping(raw, context)
+    return ExpectedPassportSignal(
+        signal_type=_require_str(mapping, "type", context),
         severity=_optional_str(mapping, "severity", context),
     )
 

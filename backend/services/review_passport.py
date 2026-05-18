@@ -36,9 +36,9 @@ MAX_SNAPSHOT_LINE_CHARS = 500
 
 _CRITERION_PREFIX_RE = re.compile(r"^\s*(?:[-*]\s+(?:\[[ xX]\]\s*)?|\d+[\.)]\s+)")
 _WORD_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9_]{2,}")
-_TEST_DECL_RE = re.compile(r"\b(it|test|describe)\s*\(")
+_TEST_DECL_RE = re.compile(r"\b(it|test|describe)\s*\(|\bdef\s+test_[A-Za-z0-9_]*\s*\(")
 _ASSERTION_RE = re.compile(r"\b(assert|expect|toBe|toEqual|toHaveBeen|pytest\.raises)\b")
-_MOCK_RE = re.compile(r"\b(mock|patch|MagicMock|AsyncMock|vi\.fn|jest\.fn)\b")
+_MOCK_RE = re.compile(r"\b(mock[A-Za-z0-9_]*|patch|MagicMock|AsyncMock|vi\.fn|jest\.fn)\b")
 
 _STOPWORDS = {
     "and",
