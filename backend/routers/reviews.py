@@ -54,6 +54,7 @@ from backend.services.review_passport import (
     get_review_passport,
 )
 from backend.services.review_passport_gate import build_passport_gate
+from backend.services.review_passport_summary import build_review_passport_summary
 from backend.utils.auth import create_review_ws_ticket, get_current_user
 from backend.utils.database import get_db
 
@@ -104,6 +105,25 @@ def _validate_agents(agent_names: list[str]) -> list[str]:
             detail=f"Unknown agent names: {', '.join(invalid)}",
         )
     return normalized
+
+
+def _review_list_item(review: Review) -> ReviewListItem:
+    return ReviewListItem(
+        id=review.id,
+        repo_id=review.repo_id,
+        github_pr_number=review.github_pr_number,
+        github_pr_title=review.github_pr_title,
+        status=review.status,
+        total_findings=review.total_findings,
+        lm_used=review.lm_used,
+        created_at=review.created_at,
+        completed_at=review.completed_at,
+        passport=(
+            build_review_passport_summary(review.passport)
+            if review.passport is not None
+            else None
+        ),
+    )
 
 
 async def _get_review_for_passport(
@@ -216,7 +236,7 @@ async def list_reviews(
     reviews = result.scalars().all()
 
     return ReviewListResponse(
-        reviews=[ReviewListItem.model_validate(r) for r in reviews],
+        reviews=[_review_list_item(r) for r in reviews],
         total=total,
         limit=limit,
         offset=offset,

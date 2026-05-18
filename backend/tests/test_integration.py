@@ -556,10 +556,14 @@ async def test_list_reviews_scoped_to_user(client, auth_headers, db_repo_id):
                 spec_digest="passport-list-test",
                 verdict="READY_WITH_RISKS",
                 confidence_score=82,
-                coverage_summary=[],
-                anti_slop_signals=[],
+                coverage_summary=[
+                    {"status": "risky", "criterion": "Local demo remains free"}
+                ],
+                anti_slop_signals=[
+                    {"type": "missing_tests", "summary": "No matching tests"}
+                ],
                 qa_steps=[],
-                missing_evidence=[],
+                missing_evidence=[{"criterion": "Private acceptance criteria"}],
                 github_gate_state="failure",
             )
         )
@@ -576,6 +580,12 @@ async def test_list_reviews_scoped_to_user(client, auth_headers, db_repo_id):
     assert listed["passport"]["confidence_score"] == 82
     assert listed["passport"]["spec_source_type"] == "review_dna"
     assert listed["passport"]["github_gate_state"] == "failure"
+    assert listed["passport"]["readiness_reason"] == (
+        "1 missing evidence item, 1 anti-slop signal"
+    )
+    assert listed["passport"]["missing_evidence_count"] == 1
+    assert listed["passport"]["anti_slop_signal_count"] == 1
+    assert listed["passport"]["risky_criteria_count"] == 1
 
 
 @pytest.mark.integration

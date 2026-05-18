@@ -33,6 +33,10 @@ const REVIEWS_RESPONSE = {
         spec_source_type: 'review_dna',
         generated_at: new Date(Date.now() - 10 * 60_000).toISOString(),
         github_gate_state: 'failure',
+        readiness_reason: '1 anti-slop signal',
+        missing_evidence_count: 0,
+        anti_slop_signal_count: 1,
+        risky_criteria_count: 1,
       },
     },
     {
@@ -80,6 +84,10 @@ const REVIEWS_WITH_PASSPORT_COCKPIT = {
         spec_source_type: 'review_dna',
         generated_at: new Date(Date.now() - 35 * 60_000).toISOString(),
         github_gate_state: 'success',
+        readiness_reason: 'Evidence covers merge criteria',
+        missing_evidence_count: 0,
+        anti_slop_signal_count: 0,
+        risky_criteria_count: 0,
       },
     },
     {
@@ -95,6 +103,10 @@ const REVIEWS_WITH_PASSPORT_COCKPIT = {
         spec_source_type: 'review_dna',
         generated_at: new Date(Date.now() - 25 * 60_000).toISOString(),
         github_gate_state: 'failure',
+        readiness_reason: '1 anti-slop signal',
+        missing_evidence_count: 0,
+        anti_slop_signal_count: 1,
+        risky_criteria_count: 1,
       },
     },
     {
@@ -110,6 +122,10 @@ const REVIEWS_WITH_PASSPORT_COCKPIT = {
         spec_source_type: 'manual',
         generated_at: new Date(Date.now() - 15 * 60_000).toISOString(),
         github_gate_state: 'failure',
+        readiness_reason: '1 missing evidence item, 1 anti-slop signal',
+        missing_evidence_count: 1,
+        anti_slop_signal_count: 1,
+        risky_criteria_count: 2,
       },
     },
     {
@@ -223,7 +239,22 @@ describe('Dashboard page', () => {
       expect(screen.getByText('Review Passport')).toBeInTheDocument()
       expect(screen.getByText('RISKS')).toBeInTheDocument()
       expect(screen.getByText('82%')).toBeInTheDocument()
+      expect(screen.getByText('1 anti-slop signal')).toBeInTheDocument()
       expect(screen.getByText('Not generated')).toBeInTheDocument()
+    })
+  })
+
+  it('shows compact passport readiness reasons in review rows', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(REVIEWS_WITH_PASSPORT_COCKPIT), { status: 200 }))
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByText('feat: blocked passport')).toBeInTheDocument()
+      expect(screen.getByText('1 missing evidence item, 1 anti-slop signal')).toBeInTheDocument()
+      expect(screen.queryByText('Evidence covers merge criteria')).not.toBeInTheDocument()
     })
   })
 
