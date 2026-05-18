@@ -251,6 +251,10 @@ class ReviewPassportSummary(BaseModel):
     spec_source_type: str
     generated_at: datetime
     github_gate_state: str | None = None
+    readiness_reason: str | None = None
+    missing_evidence_count: int = 0
+    anti_slop_signal_count: int = 0
+    risky_criteria_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

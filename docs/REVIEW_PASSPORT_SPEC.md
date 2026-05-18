@@ -232,7 +232,11 @@ each review:
     "confidence_score": 82,
     "spec_source_type": "review_dna",
     "generated_at": "2026-05-18T12:30:00Z",
-    "github_gate_state": "failure"
+    "github_gate_state": "failure",
+    "readiness_reason": "1 missing evidence item, 1 anti-slop signal",
+    "missing_evidence_count": 1,
+    "anti_slop_signal_count": 1,
+    "risky_criteria_count": 2
   }
 }
 ```
@@ -243,6 +247,9 @@ Behavior:
   per-row async lazy loads.
 - The summary must not include raw `spec_input`, diff snapshots, QA steps, or
   full evidence payloads.
+- `readiness_reason` is a short aggregate reason derived from counts and verdict.
+  It must not expose raw criteria text, private spec text, diff lines, or finding
+  excerpts.
 
 ### DELETE `/api/reviews/{review_id}/passport`
 
@@ -305,7 +312,9 @@ Review rows show a compact `Review Passport` column:
 - `BLOCKED` for `BLOCKED` passports.
 - `Not generated` when no passport exists.
 
-When a passport exists, the row also shows its confidence percentage.
+When a passport exists, the row also shows its confidence percentage. Non-ready
+rows also show the compact `readiness_reason` under the badge so the user can see
+why a review needs attention without opening details.
 Done reviews without a passport expose a compact `DNA Passport` action in the
 row actions. The action calls `POST /api/reviews/{review_id}/passport/review-dna`
 and updates only that row when the generated passport returns.

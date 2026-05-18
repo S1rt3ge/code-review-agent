@@ -22,7 +22,7 @@ import { StatusBadge } from '@/components/StatusBadge.jsx'
  * @property {string|null} [error_message]
  * @property {number} total_findings
  * @property {string} created_at
- * @property {{ verdict: string, confidence_score: number, spec_source_type: string, generated_at: string, github_gate_state?: string|null }|null} [passport]
+ * @property {{ verdict: string, confidence_score: number, spec_source_type: string, generated_at: string, github_gate_state?: string|null, readiness_reason?: string|null, missing_evidence_count?: number, anti_slop_signal_count?: number, risky_criteria_count?: number }|null} [passport]
  */
 
 /**
@@ -627,19 +627,106 @@ function PassportBadge({ passport }) {
     className: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
   }
 
+  const showReason = passport.verdict !== 'READY' && passport.readiness_reason
+
   return (
-    <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-      <span
-        aria-label={`Review Passport verdict: ${meta.ariaLabel}`}
-        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}
-      >
-        {meta.label}
-      </span>
-      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-        {passport.confidence_score}%
-      </span>
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+        <span
+          aria-label={`Review Passport verdict: ${meta.ariaLabel}`}
+          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}
+        >
+          {meta.label}
+        </span>
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+          {passport.confidence_score}%
+        </span>
+      </div>
+      {showReason && (
+        <span className="max-w-52 text-right text-xs leading-snug text-gray-500 dark:text-gray-400">
+          {passport.readiness_reason}
+        </span>
+      )}
     </div>
   )
+}
+
+/**
+ * @param {unknown} value
+ * @returns {unknown[]}
+ */
+function asArray(value) {
+  return Array.isArray(value) ? value : []
+}
+
+/**
+ * @param {number} count
+ * @param {string} singular
+ * @param {string} [plural]
+ * @returns {string}
+ */
+function pluralize(count, singular, plural) {
+  return count === 1 ? `${count} ${singular}` : `${count} ${plural || `${singular}s`}`
+}
+
+/**
+ * @param {Record<string, unknown>} passport
+ * @param {number} missingEvidenceCount
+ * @param {number} antiSlopSignalCount
+ * @param {number} riskyCriteriaCount
+ * @returns {string}
+ */
+function getReadinessReason(passport, missingEvidenceCount, antiSlopSignalCount, riskyCriteriaCount) {
+  if (typeof passport.readiness_reason === 'string' && passport.readiness_reason.trim()) {
+    return passport.readiness_reason
+  }
+  if (passport.verdict === 'READY') return 'Evidence covers merge criteria'
+
+  const reasons = []
+  if (missingEvidenceCount) {
+    reasons.push(pluralize(missingEvidenceCount, 'missing evidence item'))
+  }
+  if (antiSlopSignalCount) {
+    reasons.push(pluralize(antiSlopSignalCount, 'anti-slop signal'))
+  }
+  if (reasons.length) return reasons.slice(0, 2).join(', ')
+  if (riskyCriteriaCount) {
+    return pluralize(riskyCriteriaCount, 'criterion needs evidence', 'criteria need evidence')
+  }
+  if (passport.github_gate_state === 'failure') return 'Passport gate is failing'
+  if (passport.verdict === 'BLOCKED') return 'Passport marked blocked'
+  return 'Review needs attention'
+}
+
+/**
+ * @param {Record<string, unknown>} passport
+ * @returns {NonNullable<ReviewSummary['passport']>}
+ */
+function toReviewPassportSummary(passport) {
+  const missingEvidenceCount = Number(passport.missing_evidence_count ?? asArray(passport.missing_evidence).length)
+  const antiSlopSignalCount = Number(passport.anti_slop_signal_count ?? asArray(passport.anti_slop_signals).length)
+  const riskyCriteriaCount = Number(passport.risky_criteria_count ?? asArray(passport.coverage_summary).filter(item => (
+    item &&
+    typeof item === 'object' &&
+    ['missing', 'risky', 'uncertain'].includes(String(item.status || '').toLowerCase())
+  )).length)
+
+  return {
+    verdict: String(passport.verdict || ''),
+    confidence_score: Number(passport.confidence_score || 0),
+    spec_source_type: String(passport.spec_source_type || ''),
+    generated_at: String(passport.generated_at || ''),
+    github_gate_state: typeof passport.github_gate_state === 'string' ? passport.github_gate_state : null,
+    readiness_reason: getReadinessReason(
+      passport,
+      missingEvidenceCount,
+      antiSlopSignalCount,
+      riskyCriteriaCount
+    ),
+    missing_evidence_count: missingEvidenceCount,
+    anti_slop_signal_count: antiSlopSignalCount,
+    risky_criteria_count: riskyCriteriaCount,
+  }
 }
 
 const PASSPORT_READINESS_FILTERS = [
@@ -1015,13 +1102,7 @@ export function Dashboard() {
         item.id === review.id
           ? {
               ...item,
-              passport: {
-                verdict: passport.verdict,
-                confidence_score: passport.confidence_score,
-                spec_source_type: passport.spec_source_type,
-                generated_at: passport.generated_at,
-                github_gate_state: passport.github_gate_state ?? null,
-              },
+              passport: toReviewPassportSummary(passport),
             }
           : item
       )))
