@@ -105,7 +105,7 @@ jobs:
               summary.write("\n")
 
       - name: Upload Review DNA artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: review-dna
           path: |
