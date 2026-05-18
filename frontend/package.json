@@ -29,7 +29,7 @@
     "@vitest/ui": "^4.1.4",
     "autoprefixer": "^10.4.17",
     "jsdom": "^24.0.0",
-    "postcss": "^8.5.10",
+    "postcss": "^8.5.14",
     "tailwindcss": "^4.2.2",
     "vite": "^8.0.10",
     "vitest": "^4.1.4"
