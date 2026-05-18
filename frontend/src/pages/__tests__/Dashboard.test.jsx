@@ -50,6 +50,21 @@ const REVIEWS_RESPONSE = {
 
 const EMPTY_REVIEWS_RESPONSE = { reviews: [], total: 0 }
 
+const REVIEWS_WITH_GENERATABLE_PASSPORT = {
+  reviews: [
+    {
+      id: 'rev-dna',
+      github_pr_title: 'feat: one click passport',
+      github_pr_number: 24,
+      status: 'done',
+      total_findings: 0,
+      created_at: new Date(Date.now() - 15 * 60_000).toISOString(),
+      passport: null,
+    },
+  ],
+  total: 1,
+}
+
 const SETTINGS_UNCONFIGURED = {
   plan: 'free',
   api_key_claude_set: false,
@@ -149,6 +164,37 @@ describe('Dashboard page', () => {
       expect(screen.getByText('RISKS')).toBeInTheDocument()
       expect(screen.getByText('82%')).toBeInTheDocument()
       expect(screen.getByText('Not generated')).toBeInTheDocument()
+    })
+  })
+
+  it('generates a Review DNA passport from a review row', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(REVIEWS_WITH_GENERATABLE_PASSPORT), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: 'passport-1',
+        review_id: 'rev-dna',
+        verdict: 'READY',
+        confidence_score: 95,
+        spec_source_type: 'review_dna',
+        generated_at: new Date().toISOString(),
+        github_gate_state: null,
+      }), { status: 201 }))
+
+    renderDashboard()
+
+    const generateButton = await screen.findByRole('button', {
+      name: /generate review dna passport/i,
+    })
+    fireEvent.click(generateButton)
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/reviews/rev-dna/passport/review-dna',
+        expect.objectContaining({ method: 'POST' })
+      )
+      expect(screen.getByText('READY')).toBeInTheDocument()
+      expect(screen.getByText('95%')).toBeInTheDocument()
     })
   })
 
