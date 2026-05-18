@@ -22,6 +22,7 @@ The user-visible outcome is a `Review Passport` panel on the review detail page 
 - As a user, I want invalid or oversized spec input rejected clearly, so that I can fix the input without database or terminal work.
 - As a dashboard user, I want to generate a Review Passport directly from Review DNA, so that the project methodology is evaluated without manual copy/paste.
 - As a dashboard user, I want review rows to show the current passport verdict, so that I can see merge-readiness without opening every review.
+- As a dashboard user, I want a compact readiness cockpit, so that I can focus recent reviews by `READY`, `RISKS`, `BLOCKED`, or missing passports.
 
 ## Data Model
 
@@ -308,6 +309,18 @@ When a passport exists, the row also shows its confidence percentage.
 Done reviews without a passport expose a compact `DNA Passport` action in the
 row actions. The action calls `POST /api/reviews/{review_id}/passport/review-dna`
 and updates only that row when the generated passport returns.
+
+The recent reviews section also shows a client-side `Passport Readiness`
+summary for the currently loaded rows:
+- `All`
+- `Ready`
+- `Risks`
+- `Blocked`
+- `Missing`
+
+Clicking a readiness summary filters the visible rows locally without issuing a
+new API request. Counts update immediately after row-level Review DNA passport
+generation.
 
 ## Business Logic
 
