@@ -642,6 +642,85 @@ function PassportBadge({ passport }) {
   )
 }
 
+const PASSPORT_READINESS_FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: 'ready', label: 'Ready' },
+  { value: 'risks', label: 'Risks' },
+  { value: 'blocked', label: 'Blocked' },
+  { value: 'missing', label: 'Missing' },
+]
+
+/**
+ * @param {ReviewSummary} review
+ * @returns {'ready'|'risks'|'blocked'|'missing'}
+ */
+function getPassportReadiness(review) {
+  if (!review.passport) return 'missing'
+  if (review.passport.verdict === 'READY') return 'ready'
+  if (review.passport.verdict === 'READY_WITH_RISKS') return 'risks'
+  if (review.passport.verdict === 'BLOCKED') return 'blocked'
+  return 'missing'
+}
+
+/**
+ * @param {ReviewSummary[]} reviews
+ * @returns {Record<string, number>}
+ */
+function getPassportReadinessCounts(reviews) {
+  return reviews.reduce((counts, review) => {
+    counts.all += 1
+    counts[getPassportReadiness(review)] += 1
+    return counts
+  }, {
+    all: 0,
+    ready: 0,
+    risks: 0,
+    blocked: 0,
+    missing: 0,
+  })
+}
+
+/**
+ * @param {{
+ *   active: string,
+ *   counts: Record<string, number>,
+ *   onChange: function(string): void,
+ * }} props
+ * @returns {React.ReactElement}
+ */
+function PassportReadinessCockpit({ active, counts, onChange }) {
+  return (
+    <div className="border-b border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/50">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+          Passport Readiness
+        </p>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Passport readiness filter">
+          {PASSPORT_READINESS_FILTERS.map(filter => {
+            const selected = active === filter.value
+            return (
+              <button
+                key={filter.value}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => onChange(filter.value)}
+                className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  selected
+                    ? 'border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950 dark:text-blue-200'
+                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+                }`}
+              >
+                <span>{filter.label}</span>
+                <span className="font-mono">{counts[filter.value] ?? 0}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /**
  * @param {unknown} repositoriesResponse
  * @returns {Repository[]}
@@ -799,6 +878,7 @@ export function Dashboard() {
   const [statsError, setStatsError] = useState(null)
   const [reviewsError, setReviewsError] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
+  const [passportFilter, setPassportFilter] = useState('all')
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState(/** @type {'pr'|'diff'} */ ('pr'))
   const [playgroundLoading, setPlaygroundLoading] = useState(false)
@@ -815,6 +895,10 @@ export function Dashboard() {
 
   const { get, post } = useApi()
   const showFirstRunOnboarding = !reviewsLoading && !reviewsError && reviews.length === 0 && statusFilter === ''
+  const passportReadinessCounts = getPassportReadinessCounts(reviews)
+  const visibleReviews = passportFilter === 'all'
+    ? reviews
+    : reviews.filter(review => getPassportReadiness(review) === passportFilter)
 
   const fetchStats = useCallback(async () => {
     setStatsLoading(true)
@@ -1052,9 +1136,16 @@ export function Dashboard() {
               Failed to generate Review DNA passport: {passportRowError}
             </p>
           )}
-          {reviews.length === 0 ? (
+          {reviews.length > 0 && (
+            <PassportReadinessCockpit
+              active={passportFilter}
+              counts={passportReadinessCounts}
+              onChange={setPassportFilter}
+            />
+          )}
+          {visibleReviews.length === 0 ? (
             <p className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-              No reviews match the selected filter.
+              No reviews match the selected filters.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -1071,7 +1162,7 @@ export function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {reviews.map(review => (
+                  {visibleReviews.map(review => (
                     <tr
                       key={review.id}
                       className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"

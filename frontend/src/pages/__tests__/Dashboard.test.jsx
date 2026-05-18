@@ -65,6 +65,66 @@ const REVIEWS_WITH_GENERATABLE_PASSPORT = {
   total: 1,
 }
 
+const REVIEWS_WITH_PASSPORT_COCKPIT = {
+  reviews: [
+    {
+      id: 'rev-ready',
+      github_pr_title: 'feat: ready passport',
+      github_pr_number: 31,
+      status: 'done',
+      total_findings: 0,
+      created_at: new Date(Date.now() - 40 * 60_000).toISOString(),
+      passport: {
+        verdict: 'READY',
+        confidence_score: 96,
+        spec_source_type: 'review_dna',
+        generated_at: new Date(Date.now() - 35 * 60_000).toISOString(),
+        github_gate_state: 'success',
+      },
+    },
+    {
+      id: 'rev-risks',
+      github_pr_title: 'feat: risky passport',
+      github_pr_number: 32,
+      status: 'done',
+      total_findings: 2,
+      created_at: new Date(Date.now() - 30 * 60_000).toISOString(),
+      passport: {
+        verdict: 'READY_WITH_RISKS',
+        confidence_score: 76,
+        spec_source_type: 'review_dna',
+        generated_at: new Date(Date.now() - 25 * 60_000).toISOString(),
+        github_gate_state: 'failure',
+      },
+    },
+    {
+      id: 'rev-blocked',
+      github_pr_title: 'feat: blocked passport',
+      github_pr_number: 33,
+      status: 'done',
+      total_findings: 4,
+      created_at: new Date(Date.now() - 20 * 60_000).toISOString(),
+      passport: {
+        verdict: 'BLOCKED',
+        confidence_score: 42,
+        spec_source_type: 'manual',
+        generated_at: new Date(Date.now() - 15 * 60_000).toISOString(),
+        github_gate_state: 'failure',
+      },
+    },
+    {
+      id: 'rev-missing',
+      github_pr_title: 'feat: missing passport',
+      github_pr_number: 34,
+      status: 'done',
+      total_findings: 0,
+      created_at: new Date(Date.now() - 10 * 60_000).toISOString(),
+      passport: null,
+    },
+  ],
+  total: 4,
+}
+
 const SETTINGS_UNCONFIGURED = {
   plan: 'free',
   api_key_claude_set: false,
@@ -195,6 +255,41 @@ describe('Dashboard page', () => {
       )
       expect(screen.getByText('READY')).toBeInTheDocument()
       expect(screen.getByText('95%')).toBeInTheDocument()
+    })
+  })
+
+  it('shows passport readiness counts above recent reviews', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(REVIEWS_WITH_PASSPORT_COCKPIT), { status: 200 }))
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByText('Passport Readiness')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'All 4' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Ready 1' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Risks 1' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Blocked 1' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Missing 1' })).toBeInTheDocument()
+    })
+  })
+
+  it('filters recent reviews by passport readiness', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(REVIEWS_WITH_PASSPORT_COCKPIT), { status: 200 }))
+
+    renderDashboard()
+
+    const risksFilter = await screen.findByRole('button', { name: 'Risks 1' })
+    fireEvent.click(risksFilter)
+
+    await waitFor(() => {
+      expect(screen.getByText('feat: risky passport')).toBeInTheDocument()
+      expect(screen.queryByText('feat: ready passport')).not.toBeInTheDocument()
+      expect(screen.queryByText('feat: blocked passport')).not.toBeInTheDocument()
+      expect(screen.queryByText('feat: missing passport')).not.toBeInTheDocument()
     })
   })
 
