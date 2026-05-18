@@ -305,6 +305,9 @@ Review rows show a compact `Review Passport` column:
 - `Not generated` when no passport exists.
 
 When a passport exists, the row also shows its confidence percentage.
+Done reviews without a passport expose a compact `DNA Passport` action in the
+row actions. The action calls `POST /api/reviews/{review_id}/passport/review-dna`
+and updates only that row when the generated passport returns.
 
 ## Business Logic
 

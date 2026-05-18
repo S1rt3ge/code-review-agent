@@ -803,6 +803,8 @@ export function Dashboard() {
   const [modalMode, setModalMode] = useState(/** @type {'pr'|'diff'} */ ('pr'))
   const [playgroundLoading, setPlaygroundLoading] = useState(false)
   const [playgroundError, setPlaygroundError] = useState(null)
+  const [passportGeneratingId, setPassportGeneratingId] = useState(null)
+  const [passportRowError, setPassportRowError] = useState(null)
   /** @type {[SetupStatus, function]} */
   const [setupStatus, setSetupStatus] = useState({
     repositoriesConfigured: false,
@@ -916,6 +918,36 @@ export function Dashboard() {
     }
   }
 
+  /**
+   * Generate a methodology-backed passport directly from the review row.
+   * @param {ReviewSummary} review
+   */
+  async function handleGenerateReviewDnaPassport(review) {
+    setPassportGeneratingId(review.id)
+    setPassportRowError(null)
+    try {
+      const passport = await post(`/reviews/${review.id}/passport/review-dna`, {})
+      setReviews(current => current.map(item => (
+        item.id === review.id
+          ? {
+              ...item,
+              passport: {
+                verdict: passport.verdict,
+                confidence_score: passport.confidence_score,
+                spec_source_type: passport.spec_source_type,
+                generated_at: passport.generated_at,
+                github_gate_state: passport.github_gate_state ?? null,
+              },
+            }
+          : item
+      )))
+    } catch (err) {
+      setPassportRowError(err instanceof Error ? err.message : 'Failed to generate Review DNA passport')
+    } finally {
+      setPassportGeneratingId(null)
+    }
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -1015,6 +1047,11 @@ export function Dashboard() {
             </h2>
             <ReviewFilters value={statusFilter} onChange={handleFilterChange} />
           </div>
+          {passportRowError && (
+            <p className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950 dark:text-red-300">
+              Failed to generate Review DNA passport: {passportRowError}
+            </p>
+          )}
           {reviews.length === 0 ? (
             <p className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
               No reviews match the selected filter.
@@ -1077,12 +1114,25 @@ export function Dashboard() {
                         {formatRelativeTime(review.created_at)}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <Link
-                          to={`/reviews/${review.id}`}
-                          className="text-blue-600 dark:text-blue-400 hover:underline text-xs font-medium"
-                        >
-                          View
-                        </Link>
+                        <div className="flex items-center justify-end gap-3 whitespace-nowrap">
+                          {!review.passport && review.status === 'done' && (
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateReviewDnaPassport(review)}
+                              disabled={passportGeneratingId === review.id}
+                              aria-label={`Generate Review DNA passport for ${review.github_pr_title ?? `PR #${review.github_pr_number}`}`}
+                              className="text-xs font-medium text-emerald-700 hover:text-emerald-800 hover:underline disabled:text-gray-400 disabled:no-underline dark:text-emerald-300 dark:hover:text-emerald-200"
+                            >
+                              {passportGeneratingId === review.id ? 'Generating...' : 'DNA Passport'}
+                            </button>
+                          )}
+                          <Link
+                            to={`/reviews/${review.id}`}
+                            className="text-blue-600 dark:text-blue-400 hover:underline text-xs font-medium"
+                          >
+                            View
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))}
