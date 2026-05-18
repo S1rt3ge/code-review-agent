@@ -69,6 +69,39 @@ const REVIEWS_WITH_GENERATABLE_PASSPORT = {
   total: 1,
 }
 
+const REVIEWS_WITH_BULK_PASSPORT_CANDIDATES = {
+  reviews: [
+    {
+      id: 'rev-bulk-ready',
+      github_pr_title: 'feat: bulk ready',
+      github_pr_number: 41,
+      status: 'done',
+      total_findings: 0,
+      created_at: new Date(Date.now() - 45 * 60_000).toISOString(),
+      passport: null,
+    },
+    {
+      id: 'rev-bulk-risk',
+      github_pr_title: 'feat: bulk risk',
+      github_pr_number: 42,
+      status: 'done',
+      total_findings: 1,
+      created_at: new Date(Date.now() - 35 * 60_000).toISOString(),
+      passport: null,
+    },
+    {
+      id: 'rev-bulk-pending',
+      github_pr_title: 'feat: still running',
+      github_pr_number: 43,
+      status: 'pending',
+      total_findings: 0,
+      created_at: new Date(Date.now() - 25 * 60_000).toISOString(),
+      passport: null,
+    },
+  ],
+  total: 3,
+}
+
 const REVIEWS_WITH_PASSPORT_COCKPIT = {
   reviews: [
     {
@@ -286,6 +319,89 @@ describe('Dashboard page', () => {
       )
       expect(screen.getByText('READY')).toBeInTheDocument()
       expect(screen.getByText('95%')).toBeInTheDocument()
+    })
+  })
+
+  it('generates missing Review DNA passports for completed rows in bulk', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(REVIEWS_WITH_BULK_PASSPORT_CANDIDATES), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: 'passport-bulk-ready',
+        review_id: 'rev-bulk-ready',
+        verdict: 'READY',
+        confidence_score: 91,
+        spec_source_type: 'review_dna',
+        generated_at: new Date().toISOString(),
+        github_gate_state: 'success',
+      }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: 'passport-bulk-risk',
+        review_id: 'rev-bulk-risk',
+        verdict: 'READY_WITH_RISKS',
+        confidence_score: 74,
+        spec_source_type: 'review_dna',
+        generated_at: new Date().toISOString(),
+        github_gate_state: 'failure',
+        anti_slop_signals: [{ type: 'missing_tests' }],
+      }), { status: 201 }))
+
+    renderDashboard()
+
+    const bulkButton = await screen.findByRole('button', {
+      name: /generate missing review dna passports for 2 completed reviews/i,
+    })
+    expect(bulkButton).toHaveTextContent('Generate missing DNA 2')
+    fireEvent.click(bulkButton)
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/reviews/rev-bulk-ready/passport/review-dna',
+        expect.objectContaining({ method: 'POST' })
+      )
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/reviews/rev-bulk-risk/passport/review-dna',
+        expect.objectContaining({ method: 'POST' })
+      )
+      expect(screen.getByText('91%')).toBeInTheDocument()
+      expect(screen.getByText('74%')).toBeInTheDocument()
+    })
+
+    expect(fetch.mock.calls.some(([url]) => String(url).includes('rev-bulk-pending'))).toBe(false)
+    expect(screen.queryByRole('button', {
+      name: /generate missing review dna passports/i,
+    })).not.toBeInTheDocument()
+  })
+
+  it('keeps failed bulk passport rows actionable', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(REVIEWS_WITH_BULK_PASSPORT_CANDIDATES), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: 'passport-bulk-ready',
+        review_id: 'rev-bulk-ready',
+        verdict: 'READY',
+        confidence_score: 91,
+        spec_source_type: 'review_dna',
+        generated_at: new Date().toISOString(),
+        github_gate_state: 'success',
+      }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        detail: 'Review has no diff snapshot',
+      }), { status: 400 }))
+
+    renderDashboard()
+
+    fireEvent.click(await screen.findByRole('button', {
+      name: /generate missing review dna passports for 2 completed reviews/i,
+    }))
+
+    await waitFor(() => {
+      expect(screen.getByText('91%')).toBeInTheDocument()
+      expect(screen.getByText(/Generated 1 of 2 Review DNA passports; failed for feat: bulk risk/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', {
+        name: /generate missing review dna passports for 1 completed review/i,
+      })).toBeInTheDocument()
     })
   })
 
