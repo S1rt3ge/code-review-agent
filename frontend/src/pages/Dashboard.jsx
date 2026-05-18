@@ -22,6 +22,7 @@ import { StatusBadge } from '@/components/StatusBadge.jsx'
  * @property {string|null} [error_message]
  * @property {number} total_findings
  * @property {string} created_at
+ * @property {{ verdict: string, confidence_score: number, spec_source_type: string, generated_at: string, github_gate_state?: string|null }|null} [passport]
  */
 
 /**
@@ -589,6 +590,58 @@ function formatRelativeTime(isoDate) {
   return `${Math.floor(hours / 24)}d ago`
 }
 
+const PASSPORT_VERDICT_META = {
+  READY: {
+    label: 'READY',
+    ariaLabel: 'ready',
+    className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  },
+  READY_WITH_RISKS: {
+    label: 'RISKS',
+    ariaLabel: 'ready with risks',
+    className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  },
+  BLOCKED: {
+    label: 'BLOCKED',
+    ariaLabel: 'blocked',
+    className: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  },
+}
+
+/**
+ * @param {{ passport: ReviewSummary['passport'] }} props
+ * @returns {React.ReactElement}
+ */
+function PassportBadge({ passport }) {
+  if (!passport) {
+    return (
+      <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+        Not generated
+      </span>
+    )
+  }
+
+  const meta = PASSPORT_VERDICT_META[passport.verdict] ?? {
+    label: passport.verdict,
+    ariaLabel: passport.verdict.toLowerCase(),
+    className: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+  }
+
+  return (
+    <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+      <span
+        aria-label={`Review Passport verdict: ${meta.ariaLabel}`}
+        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}
+      >
+        {meta.label}
+      </span>
+      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+        {passport.confidence_score}%
+      </span>
+    </div>
+  )
+}
+
 /**
  * @param {unknown} repositoriesResponse
  * @returns {Repository[]}
@@ -975,6 +1028,7 @@ export function Dashboard() {
                     <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">PR</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Status</th>
                     <th className="text-right py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Findings</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Review Passport</th>
                     <th className="text-right py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Time</th>
                     <th className="text-right py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Actions</th>
                   </tr>
@@ -1015,6 +1069,9 @@ export function Dashboard() {
                         >
                           {review.total_findings}
                         </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <PassportBadge passport={review.passport ?? null} />
                       </td>
                       <td className="py-3 px-4 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">
                         {formatRelativeTime(review.created_at)}

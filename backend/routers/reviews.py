@@ -191,6 +191,7 @@ async def list_reviews(
     # Build base query — always scoped to the authenticated user
     stmt = (
         select(Review)
+        .options(selectinload(Review.passport))
         .where(Review.user_id == current_user.id)
         .order_by(Review.created_at.desc())
     )

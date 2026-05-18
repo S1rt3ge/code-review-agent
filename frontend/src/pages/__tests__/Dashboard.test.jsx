@@ -27,6 +27,13 @@ const REVIEWS_RESPONSE = {
       status: 'done',
       total_findings: 5,
       created_at: new Date(Date.now() - 30 * 60_000).toISOString(), // 30m ago
+      passport: {
+        verdict: 'READY_WITH_RISKS',
+        confidence_score: 82,
+        spec_source_type: 'review_dna',
+        generated_at: new Date(Date.now() - 10 * 60_000).toISOString(),
+        github_gate_state: 'failure',
+      },
     },
     {
       id: 'rev-2',
@@ -35,6 +42,7 @@ const REVIEWS_RESPONSE = {
       status: 'pending',
       total_findings: 0,
       created_at: new Date(Date.now() - 5 * 60_000).toISOString(), // 5m ago
+      passport: null,
     },
   ],
   total: 2,
@@ -126,6 +134,21 @@ describe('Dashboard page', () => {
     await waitFor(() => {
       expect(screen.getByText('feat: add login page')).toBeInTheDocument()
       expect(screen.getByText('#12')).toBeInTheDocument()
+    })
+  })
+
+  it('shows review passport verdicts in review rows', async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(STATS_RESPONSE), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(REVIEWS_RESPONSE), { status: 200 }))
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByText('Review Passport')).toBeInTheDocument()
+      expect(screen.getByText('RISKS')).toBeInTheDocument()
+      expect(screen.getByText('82%')).toBeInTheDocument()
+      expect(screen.getByText('Not generated')).toBeInTheDocument()
     })
   })
 
