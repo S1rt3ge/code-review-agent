@@ -128,3 +128,28 @@ diff --git a/frontend/src/pages/__tests__/ReviewDetail.test.jsx b/frontend/src/p
     assert passport["verdict"] == "READY"
     assert passport["missing_evidence"] == []
     assert passport["qa_steps"][0]["command"] == "docker compose up --build"
+
+
+def test_build_review_passport_accepts_review_dna_source_type() -> None:
+    spec = "- [ ] AC-1: User can run local demo with docker compose."
+    diff = """diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -1,2 +1,3 @@
++Run local demo with docker compose up --build.
+"""
+    snapshot = snapshot_diff(diff)
+
+    passport = build_review_passport(
+        mode="combined",
+        spec_source_type="review_dna",
+        spec_source_ref="Review DNA Criteria Pack (code-review-agent)",
+        spec_input=spec,
+        findings=[],
+        changed_files=snapshot["changed_files"],
+        added_lines=snapshot["added_lines"],
+    )
+
+    assert passport["spec_source_type"] == "review_dna"
+    assert passport["spec_source_ref"] == "Review DNA Criteria Pack (code-review-agent)"
+    assert passport["coverage_summary"][0]["criterion_id"] == "AC-1"

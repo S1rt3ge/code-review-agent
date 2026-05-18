@@ -1111,6 +1111,35 @@ async def test_review_passport_markdown_export_works_for_local_demo(client, auth
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_review_passport_generates_from_review_dna_for_local_demo(
+    client,
+    auth_headers,
+):
+    r = await client.post(
+        "/api/reviews/playground/demo",
+        json={},
+        headers=auth_headers,
+    )
+    assert r.status_code == 201, r.text
+    review_id = r.json()["id"]
+
+    r = await client.post(
+        f"/api/reviews/{review_id}/passport/review-dna",
+        json={},
+        headers=auth_headers,
+    )
+
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["mode"] == "combined"
+    assert body["spec_source_type"] == "review_dna"
+    assert body["spec_source_ref"].startswith("Review DNA Criteria Pack")
+    assert "Review DNA Criteria Pack" in body["spec_input"]
+    assert body["coverage_summary"]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_review_passport_post_comment_rejects_local_demo(client, auth_headers):
     r = await client.post(
         "/api/reviews/playground/demo",

@@ -71,6 +71,24 @@ VALID_AGENTS = {"security", "performance", "style", "logic"}
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _review_dna_pack_payload() -> tuple[
+    str,
+    str,
+    str,
+    str,
+    list[ReviewDNACriterionResponse],
+]:
+    """Load Review DNA criteria once and return reusable API/passport payload."""
+    pack = build_review_dna_criteria_pack_for_repo(PROJECT_ROOT)
+    spec_source_ref = f"{pack.title} ({pack.source_profile})"
+    markdown = render_review_dna_criteria_pack(pack)
+    criteria = [
+        ReviewDNACriterionResponse(**criterion.to_dict())
+        for criterion in pack.criteria
+    ]
+    return pack.title, pack.source_profile, spec_source_ref, markdown, criteria
+
+
 def _validate_agents(agent_names: list[str]) -> list[str]:
     """Validate and normalize selected analysis agent names."""
     normalized = [agent.strip() for agent in agent_names if agent.strip()]
@@ -127,7 +145,9 @@ async def get_review_dna_criteria_pack(
 ) -> ReviewDNACriteriaPackResponse:
     """Return Review DNA criteria as Review Passport-ready form input."""
     try:
-        pack = build_review_dna_criteria_pack_for_repo(PROJECT_ROOT)
+        title, source_profile, spec_source_ref, markdown, criteria = (
+            _review_dna_pack_payload()
+        )
     except (OSError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -135,14 +155,11 @@ async def get_review_dna_criteria_pack(
         ) from exc
 
     return ReviewDNACriteriaPackResponse(
-        title=pack.title,
-        source_profile=pack.source_profile,
-        spec_source_ref=f"{pack.title} ({pack.source_profile})",
-        markdown=render_review_dna_criteria_pack(pack),
-        criteria=[
-            ReviewDNACriterionResponse(**criterion.to_dict())
-            for criterion in pack.criteria
-        ],
+        title=title,
+        source_profile=source_profile,
+        spec_source_ref=spec_source_ref,
+        markdown=markdown,
+        criteria=criteria,
     )
 
 
@@ -348,6 +365,38 @@ async def create_review_passport(
             detail=str(exc),
         ) from exc
     except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return ReviewPassportResponse.model_validate(passport)
+
+
+@router.post(
+    "/{review_id}/passport/review-dna",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ReviewPassportResponse,
+)
+async def create_review_passport_from_review_dna(
+    review_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewPassportResponse:
+    """Create or replace a passport using the current Review DNA Criteria Pack."""
+    review = await _get_review_for_passport(session, review_id, current_user)
+    try:
+        _, _, spec_source_ref, markdown, _ = _review_dna_pack_payload()
+        passport = await create_or_replace_review_passport(
+            session,
+            review=review,
+            current_user=current_user,
+            mode="combined",
+            spec_source_type="review_dna",
+            spec_source_ref=spec_source_ref,
+            spec_input=markdown,
+            code_diff=None,
+        )
+    except (ValueError, OverflowError, OSError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
