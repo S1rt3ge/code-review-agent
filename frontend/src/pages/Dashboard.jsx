@@ -750,6 +750,22 @@ function getPassportReadiness(review) {
 }
 
 /**
+ * @param {ReviewSummary} review
+ * @returns {string}
+ */
+function getReviewTitle(review) {
+  return review.github_pr_title ?? `PR #${review.github_pr_number}`
+}
+
+/**
+ * @param {ReviewSummary[]} reviews
+ * @returns {ReviewSummary[]}
+ */
+function getReviewDnaPassportCandidates(reviews) {
+  return reviews.filter(review => review.status === 'done' && !review.passport)
+}
+
+/**
  * @param {ReviewSummary[]} reviews
  * @returns {Record<string, number>}
  */
@@ -771,37 +787,72 @@ function getPassportReadinessCounts(reviews) {
  * @param {{
  *   active: string,
  *   counts: Record<string, number>,
+ *   bulkCandidateCount: number,
+ *   bulkGenerating: boolean,
+ *   bulkProgress: { completed: number, total: number }|null,
  *   onChange: function(string): void,
+ *   onGenerateMissing: function(): void,
  * }} props
  * @returns {React.ReactElement}
  */
-function PassportReadinessCockpit({ active, counts, onChange }) {
+function PassportReadinessCockpit({
+  active,
+  counts,
+  bulkCandidateCount,
+  bulkGenerating,
+  bulkProgress,
+  onChange,
+  onGenerateMissing,
+}) {
+  const bulkAriaLabel = `Generate missing Review DNA passports for ${bulkCandidateCount} completed ${bulkCandidateCount === 1 ? 'review' : 'reviews'}`
+
   return (
     <div className="border-b border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/50">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
           Passport Readiness
         </p>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Passport readiness filter">
-          {PASSPORT_READINESS_FILTERS.map(filter => {
-            const selected = active === filter.value
-            return (
-              <button
-                key={filter.value}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => onChange(filter.value)}
-                className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  selected
-                    ? 'border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950 dark:text-blue-200'
-                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-                }`}
-              >
-                <span>{filter.label}</span>
-                <span className="font-mono">{counts[filter.value] ?? 0}</span>
-              </button>
-            )
-          })}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Passport readiness filter">
+            {PASSPORT_READINESS_FILTERS.map(filter => {
+              const selected = active === filter.value
+              return (
+                <button
+                  key={filter.value}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => onChange(filter.value)}
+                  className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    selected
+                      ? 'border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950 dark:text-blue-200'
+                      : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <span>{filter.label}</span>
+                  <span className="font-mono">{counts[filter.value] ?? 0}</span>
+                </button>
+              )
+            })}
+          </div>
+          {bulkCandidateCount > 0 && (
+            <button
+              type="button"
+              aria-label={bulkAriaLabel}
+              disabled={bulkGenerating}
+              onClick={onGenerateMissing}
+              className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-70 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 dark:hover:bg-emerald-900"
+            >
+              {bulkGenerating && bulkProgress
+                ? `Generating ${bulkProgress.completed}/${bulkProgress.total}`
+                : (
+                  <>
+                    <span>Generate missing DNA</span>
+                    {' '}
+                    <span className="font-mono">{bulkCandidateCount}</span>
+                  </>
+                )}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -971,6 +1022,8 @@ export function Dashboard() {
   const [playgroundLoading, setPlaygroundLoading] = useState(false)
   const [playgroundError, setPlaygroundError] = useState(null)
   const [passportGeneratingId, setPassportGeneratingId] = useState(null)
+  const [passportBulkGenerating, setPassportBulkGenerating] = useState(false)
+  const [passportBulkProgress, setPassportBulkProgress] = useState(null)
   const [passportRowError, setPassportRowError] = useState(null)
   /** @type {[SetupStatus, function]} */
   const [setupStatus, setSetupStatus] = useState({
@@ -983,6 +1036,7 @@ export function Dashboard() {
   const { get, post } = useApi()
   const showFirstRunOnboarding = !reviewsLoading && !reviewsError && reviews.length === 0 && statusFilter === ''
   const passportReadinessCounts = getPassportReadinessCounts(reviews)
+  const passportBulkCandidates = getReviewDnaPassportCandidates(reviews)
   const visibleReviews = passportFilter === 'all'
     ? reviews
     : reviews.filter(review => getPassportReadiness(review) === passportFilter)
@@ -1094,6 +1148,8 @@ export function Dashboard() {
    * @param {ReviewSummary} review
    */
   async function handleGenerateReviewDnaPassport(review) {
+    if (passportBulkGenerating) return
+
     setPassportGeneratingId(review.id)
     setPassportRowError(null)
     try {
@@ -1110,6 +1166,56 @@ export function Dashboard() {
       setPassportRowError(err instanceof Error ? err.message : 'Failed to generate Review DNA passport')
     } finally {
       setPassportGeneratingId(null)
+    }
+  }
+
+  async function handleGenerateMissingReviewDnaPassports() {
+    const candidates = getReviewDnaPassportCandidates(reviews)
+    if (passportBulkGenerating || candidates.length === 0) return
+
+    setPassportBulkGenerating(true)
+    setPassportBulkProgress({ completed: 0, total: candidates.length })
+    setPassportRowError(null)
+
+    const failures = []
+    let generatedCount = 0
+
+    try {
+      for (const review of candidates) {
+        setPassportGeneratingId(review.id)
+        try {
+          const passport = await post(`/reviews/${review.id}/passport/review-dna`, {})
+          generatedCount += 1
+          setReviews(current => current.map(item => (
+            item.id === review.id
+              ? {
+                  ...item,
+                  passport: toReviewPassportSummary(passport),
+                }
+              : item
+          )))
+        } catch {
+          failures.push(getReviewTitle(review))
+        } finally {
+          setPassportBulkProgress(current => (
+            current
+              ? { ...current, completed: Math.min(current.completed + 1, current.total) }
+              : current
+          ))
+        }
+      }
+
+      if (failures.length > 0) {
+        const shownFailures = failures.slice(0, 2).join(', ')
+        const remaining = failures.length > 2 ? `, and ${failures.length - 2} more` : ''
+        setPassportRowError(
+          `Generated ${generatedCount} of ${candidates.length} Review DNA passports; failed for ${shownFailures}${remaining}`
+        )
+      }
+    } finally {
+      setPassportGeneratingId(null)
+      setPassportBulkGenerating(false)
+      setPassportBulkProgress(null)
     }
   }
 
@@ -1221,7 +1327,11 @@ export function Dashboard() {
             <PassportReadinessCockpit
               active={passportFilter}
               counts={passportReadinessCounts}
+              bulkCandidateCount={passportBulkCandidates.length}
+              bulkGenerating={passportBulkGenerating}
+              bulkProgress={passportBulkProgress}
               onChange={setPassportFilter}
+              onGenerateMissing={handleGenerateMissingReviewDnaPassports}
             />
           )}
           {visibleReviews.length === 0 ? (
@@ -1291,7 +1401,7 @@ export function Dashboard() {
                             <button
                               type="button"
                               onClick={() => handleGenerateReviewDnaPassport(review)}
-                              disabled={passportGeneratingId === review.id}
+                              disabled={passportBulkGenerating || passportGeneratingId === review.id}
                               aria-label={`Generate Review DNA passport for ${review.github_pr_title ?? `PR #${review.github_pr_number}`}`}
                               className="text-xs font-medium text-emerald-700 hover:text-emerald-800 hover:underline disabled:text-gray-400 disabled:no-underline dark:text-emerald-300 dark:hover:text-emerald-200"
                             >

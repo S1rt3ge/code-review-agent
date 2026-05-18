@@ -23,6 +23,7 @@ The user-visible outcome is a `Review Passport` panel on the review detail page 
 - As a dashboard user, I want to generate a Review Passport directly from Review DNA, so that the project methodology is evaluated without manual copy/paste.
 - As a dashboard user, I want review rows to show the current passport verdict, so that I can see merge-readiness without opening every review.
 - As a dashboard user, I want a compact readiness cockpit, so that I can focus recent reviews by `READY`, `RISKS`, `BLOCKED`, or missing passports.
+- As a dashboard user, I want to generate missing Review DNA passports in bulk for completed reviews, so that the methodology can be applied across recent work without row-by-row clicking.
 
 ## Data Model
 
@@ -330,6 +331,13 @@ summary for the currently loaded rows:
 Clicking a readiness summary filters the visible rows locally without issuing a
 new API request. Counts update immediately after row-level Review DNA passport
 generation.
+
+When at least one currently loaded `done` review has no passport, the readiness
+cockpit shows a `Generate missing DNA` action with the candidate count. The
+action calls `POST /api/reviews/{review_id}/passport/review-dna` for each loaded
+completed review without a passport, skips pending/analyzing/error reviews, and
+updates rows as each passport returns. Partial failures keep failed rows as
+`Not generated` and surface one inline error summary.
 
 ## Business Logic
 
