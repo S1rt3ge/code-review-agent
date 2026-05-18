@@ -535,17 +535,47 @@ async def test_create_review_rejects_foreign_repository(client, auth_headers):
 @pytest.mark.asyncio
 async def test_list_reviews_scoped_to_user(client, auth_headers, db_repo_id):
     # Create one review
-    await client.post(
+    created = await client.post(
         "/api/reviews",
         json={"repo_id": db_repo_id, "github_pr_number": 99},
         headers=auth_headers,
     )
+    assert created.status_code == 201
+    review = created.json()
+
+    async with async_session_factory() as session:
+        await session.execute(
+            insert(ReviewPassport).values(
+                id=uuid.uuid4(),
+                review_id=review["id"],
+                user_id=review["user_id"],
+                mode="combined",
+                spec_source_type="review_dna",
+                spec_source_ref="Review DNA Criteria Pack (code-review-agent)",
+                spec_input="- Local demo remains free",
+                spec_digest="passport-list-test",
+                verdict="READY_WITH_RISKS",
+                confidence_score=82,
+                coverage_summary=[],
+                anti_slop_signals=[],
+                qa_steps=[],
+                missing_evidence=[],
+                github_gate_state="failure",
+            )
+        )
+        await session.commit()
+
     r = await client.get("/api/reviews", headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
     assert "reviews" in body
     assert "total" in body
     assert body["total"] >= 1
+    listed = next(item for item in body["reviews"] if item["id"] == review["id"])
+    assert listed["passport"]["verdict"] == "READY_WITH_RISKS"
+    assert listed["passport"]["confidence_score"] == 82
+    assert listed["passport"]["spec_source_type"] == "review_dna"
+    assert listed["passport"]["github_gate_state"] == "failure"
 
 
 @pytest.mark.integration

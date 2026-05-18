@@ -21,6 +21,7 @@ The user-visible outcome is a `Review Passport` panel on the review detail page 
 - As a local evaluator, I want the passport to work on `Try demo review` and pasted diffs without paid providers, so that the demo remains self-hosted and free.
 - As a user, I want invalid or oversized spec input rejected clearly, so that I can fix the input without database or terminal work.
 - As a dashboard user, I want to generate a Review Passport directly from Review DNA, so that the project methodology is evaluated without manual copy/paste.
+- As a dashboard user, I want review rows to show the current passport verdict, so that I can see merge-readiness without opening every review.
 
 ## Data Model
 
@@ -218,6 +219,30 @@ Errors:
 - `403` review does not belong to the user.
 - `404` review or passport not found.
 
+### GET `/api/reviews`
+
+Existing list response includes a lightweight nullable `passport` summary for
+each review:
+
+```json
+{
+  "passport": {
+    "verdict": "READY_WITH_RISKS",
+    "confidence_score": 82,
+    "spec_source_type": "review_dna",
+    "generated_at": "2026-05-18T12:30:00Z",
+    "github_gate_state": "failure"
+  }
+}
+```
+
+Behavior:
+- `passport` is `null` when no Review Passport has been generated.
+- The list endpoint must eager-load the one-to-one passport relation to avoid
+  per-row async lazy loads.
+- The summary must not include raw `spec_input`, diff snapshots, QA steps, or
+  full evidence payloads.
+
 ### DELETE `/api/reviews/{review_id}/passport`
 
 Auth: Bearer user JWT.
@@ -273,7 +298,13 @@ Validation:
 
 No new top-level route in the first slice.
 
-Add a small passport status indicator to review rows later in the same feature if the Review Detail panel is stable.
+Review rows show a compact `Review Passport` column:
+- `READY` for `READY` passports.
+- `RISKS` for `READY_WITH_RISKS` passports.
+- `BLOCKED` for `BLOCKED` passports.
+- `Not generated` when no passport exists.
+
+When a passport exists, the row also shows its confidence percentage.
 
 ## Business Logic
 

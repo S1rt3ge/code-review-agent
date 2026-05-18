@@ -243,6 +243,18 @@ class ReviewResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ReviewPassportSummary(BaseModel):
+    """Lightweight passport state for review list rows."""
+
+    verdict: str
+    confidence_score: int
+    spec_source_type: str
+    generated_at: datetime
+    github_gate_state: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ReviewListItem(BaseModel):
     """Abbreviated review data for list endpoints."""
 
@@ -255,6 +267,7 @@ class ReviewListItem(BaseModel):
     lm_used: str | None = None
     created_at: datetime
     completed_at: datetime | None = None
+    passport: ReviewPassportSummary | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
