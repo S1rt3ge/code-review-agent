@@ -28,7 +28,11 @@ cases[]
   - file_path: string optional
   - line_number: int optional
   - severity: string optional
+- expected_passport_signals[]: optional Review Passport anti-slop signal descriptors
+  - type: string
+  - severity: string optional
 - max_unexpected_findings: int, default 0
+- max_unexpected_passport_signals: int, default 0
 ```
 
 ## API
@@ -57,8 +61,13 @@ No UI changes. Results are printed in the terminal.
 - Load eval cases from JSON and validate required fields.
 - Run `backend.services.playground_review.analyze_diff_locally` for each case.
 - Match expected findings by `agent_name` and `finding_type`, and by optional `file_path`, `line_number`, and `severity` when provided.
-- A case passes when all expected findings are matched and unexpected findings do not exceed `max_unexpected_findings`.
-- Report case pass rate, expected finding recall, unexpected finding count, and an overall score.
+- For cases with `expected_passport_signals`, run Review Passport anti-slop
+  detection against the same diff snapshot and match expected signals by `type`
+  and optional `severity`.
+- A case passes when all expected findings and expected passport signals are
+  matched, and unexpected findings/signals do not exceed their configured max.
+- Report case pass rate, expected finding recall, passport signal recall,
+  unexpected finding/signal counts, and an overall score.
 
 ## Edge Cases
 
@@ -66,6 +75,8 @@ No UI changes. Results are printed in the terminal.
 - Malformed JSON or missing fields should return exit code 2 from the CLI.
 - Clean diffs with no expected findings should pass only when the analyzer emits no unexpected findings.
 - Cases should respect `selected_agents`, so disabled agents cannot create expected matches.
+- Passport-only cases may use an empty `selected_agents` list when
+  `expected_passport_signals` is present.
 - Large diffs are not the initial target; this eval is a fast smoke/regression suite.
 
 ## Priority / Dependencies

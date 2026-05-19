@@ -476,7 +476,7 @@ Implementation order:
 5. Store diff snapshots during playground demo and pasted-diff review creation.
 6. Frontend API wrappers and Review Detail passport panel tests.
 7. Review Detail UI implementation with generate/regenerate/delete/copy QA script actions.
-8. Eval fixture updates so `python scripts/evaluate_review_quality.py` can include anti-slop cases.
+8. Eval fixture updates so `python scripts/evaluate_review_quality.py` includes anti-slop cases through `expected_passport_signals`.
 9. README and `docs/local-demo.md` update showing the Review Passport demo flow.
 
 Verification commands:

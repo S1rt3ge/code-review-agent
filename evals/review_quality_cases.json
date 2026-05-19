@@ -75,6 +75,51 @@
       "max_unexpected_findings": 0
     },
     {
+      "id": "passport_unbounded_input",
+      "title": "Detect unbounded Review Passport input path",
+      "selected_agents": [],
+      "code_diff": "diff --git a/app/routes.py b/app/routes.py\n--- a/app/routes.py\n+++ b/app/routes.py\n@@ -1,2 +1,4 @@\n+@app.post(\"/reviews\")\n+async def create_review(code_diff: str):\ndiff --git a/app/routes_test.py b/app/routes_test.py\n--- a/app/routes_test.py\n+++ b/app/routes_test.py\n@@ -1,2 +1,4 @@\n+def test_create_review_limits_input():\n+    assert True\n",
+      "expected_findings": [],
+      "expected_passport_signals": [
+        {
+          "type": "unbounded_input",
+          "severity": "medium"
+        }
+      ],
+      "max_unexpected_findings": 0,
+      "max_unexpected_passport_signals": 0
+    },
+    {
+      "id": "passport_assertionless_tests",
+      "title": "Detect tests added without assertions",
+      "selected_agents": [],
+      "code_diff": "diff --git a/app/orders_test.py b/app/orders_test.py\n--- a/app/orders_test.py\n+++ b/app/orders_test.py\n@@ -1,2 +1,4 @@\n+def test_creates_order():\n+    create_order({\"sku\": \"demo\"})\n",
+      "expected_findings": [],
+      "expected_passport_signals": [
+        {
+          "type": "assertionless_tests",
+          "severity": "medium"
+        }
+      ],
+      "max_unexpected_findings": 0,
+      "max_unexpected_passport_signals": 0
+    },
+    {
+      "id": "passport_over_mocked_tests",
+      "title": "Detect mock-heavy tests with weak behavior evidence",
+      "selected_agents": [],
+      "code_diff": "diff --git a/app/payments_test.py b/app/payments_test.py\n--- a/app/payments_test.py\n+++ b/app/payments_test.py\n@@ -1,2 +1,8 @@\n+def test_payment_authorization():\n+    mock_gateway = Mock()\n+    mock_user = Mock()\n+    mock_logger = Mock()\n+    mock_config = Mock()\n+    assert authorize_payment(mock_gateway, mock_user, mock_config)\n",
+      "expected_findings": [],
+      "expected_passport_signals": [
+        {
+          "type": "over_mocked_tests",
+          "severity": "medium"
+        }
+      ],
+      "max_unexpected_findings": 0,
+      "max_unexpected_passport_signals": 0
+    },
+    {
       "id": "selected_agent_scope",
       "title": "Respect selected agents when a disabled agent would flag code",
       "selected_agents": ["security"],

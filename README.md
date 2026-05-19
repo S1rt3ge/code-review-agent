@@ -341,8 +341,10 @@ python scripts/evaluate_review_quality.py --json
 ```
 
 The eval runner grades the deterministic Local Review Playground analyzer against
-fixture cases in `evals/review_quality_cases.json`. It reports case pass rate,
-expected finding recall, unexpected findings, and an overall score.
+fixture cases in `evals/review_quality_cases.json`. It also covers Review
+Passport anti-slop signals such as unbounded input, assertionless tests, and
+over-mocked tests. It reports case pass rate, expected finding recall, passport
+signal recall, unexpected findings/signals, and an overall score.
 
 ### Review DNA
 
