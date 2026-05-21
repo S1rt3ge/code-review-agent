@@ -13,7 +13,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
-from jose import jwt
 
 from backend.config import settings
 from backend.utils import auth_policy
@@ -24,6 +23,7 @@ from backend.utils.auth import (
     verify_password,
     verify_token,
 )
+from backend.utils.jwt_tokens import encode_jwt
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +75,7 @@ def test_verify_token_expired_raises_401():
         "exp": datetime.now(timezone.utc) - timedelta(seconds=1),
         "iat": datetime.now(timezone.utc) - timedelta(minutes=5),
     }
-    token = jwt.encode(
+    token = encode_jwt(
         expired_payload, settings.jwt_secret, algorithm=settings.jwt_algorithm
     )
     with pytest.raises(HTTPException) as exc_info:
@@ -97,7 +97,7 @@ def test_verify_token_missing_sub_raises_401():
         "email": "x@x.com",
         "exp": datetime.now(timezone.utc) + timedelta(hours=1),
     }
-    token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    token = encode_jwt(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
     with pytest.raises(HTTPException) as exc_info:
         verify_token(token)
     assert exc_info.value.status_code == 401

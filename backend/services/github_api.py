@@ -16,9 +16,9 @@ import time
 from dataclasses import dataclass
 
 import httpx
-from jose import jwt
 
 from backend.config import settings
+from backend.utils.jwt_tokens import encode_jwt
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ class GitHubApiClient:
             "exp": now + 540,  # 9 minutes
             "iss": str(self._app_id),
         }
-        return jwt.encode(payload, self._private_key, algorithm="RS256")
+        return encode_jwt(payload, self._private_key, algorithm="RS256")
 
     async def _get_installation_token(self, installation_id: int) -> str:
         """Return a valid installation access token, refreshing if needed.

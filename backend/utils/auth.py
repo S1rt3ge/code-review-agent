@@ -19,12 +19,12 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
 from backend.utils.auth_policy import is_email_verification_required
 from backend.utils.database import get_db
+from backend.utils.jwt_tokens import JWTDecodeError, decode_jwt, encode_jwt
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ def create_access_token(user_id: uuid.UUID, email: str) -> str:
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
+    return encode_jwt(payload, settings.jwt_secret, algorithm=ALGORITHM)
 
 
 def create_review_ws_ticket(user_id: uuid.UUID, review_id: uuid.UUID) -> str:
@@ -120,7 +120,7 @@ def create_review_ws_ticket(user_id: uuid.UUID, review_id: uuid.UUID) -> str:
         "exp": now + timedelta(minutes=5),
         "iat": now,
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
+    return encode_jwt(payload, settings.jwt_secret, algorithm=ALGORITHM)
 
 
 def verify_review_ws_ticket(ticket: str, expected_review_id: str) -> dict:
@@ -130,8 +130,8 @@ def verify_review_ws_ticket(ticket: str, expected_review_id: str) -> dict:
         detail="Could not validate WebSocket ticket",
     )
     try:
-        payload = jwt.decode(ticket, settings.jwt_secret, algorithms=[ALGORITHM])
-    except JWTError as exc:
+        payload = decode_jwt(ticket, settings.jwt_secret, algorithms=[ALGORITHM])
+    except JWTDecodeError as exc:
         logger.debug("WS ticket decode failed: %s", exc)
         raise credentials_exc
 
@@ -161,8 +161,8 @@ def verify_token(token: str) -> dict:
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
-    except JWTError as exc:
+        payload = decode_jwt(token, settings.jwt_secret, algorithms=[ALGORITHM])
+    except JWTDecodeError as exc:
         logger.debug("JWT decode failed: %s", exc)
         raise credentials_exc
 
