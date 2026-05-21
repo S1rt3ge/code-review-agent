@@ -820,6 +820,7 @@ function PassportReadinessCockpit({
                 <button
                   key={filter.value}
                   type="button"
+                  aria-label={`${filter.label} ${counts[filter.value] ?? 0}`}
                   aria-pressed={selected}
                   onClick={() => onChange(filter.value)}
                   className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
