@@ -37,11 +37,8 @@ def test_build_review_dna_profile_detects_project_evidence(tmp_path: Path) -> No
     evidence_paths = {source.path for source in profile.evidence_sources}
     assert {
         "README.md",
-        "PROJECT_IDEA.md",
-        "TECHNICAL_SPEC.md",
-        "SPEC_TEMPLATE.md",
-        "docs/REVIEW_DNA_IDEA.md",
-        "docs/REVIEW_PASSPORT_SPEC.md",
+        "SECURITY.md",
+        "CHANGELOG.md",
         "evals/review_quality_cases.json",
     }.issubset(evidence_paths)
 
@@ -133,7 +130,7 @@ def test_review_dna_check_passes_for_docs_only_change(tmp_path: Path) -> None:
 
     result = run_review_dna_check(
         profile,
-        changed_files=["docs/REVIEW_DNA_CLI_SPEC.md"],
+        changed_files=["README.md"],
     )
 
     assert result.status == "PASS"
@@ -189,7 +186,7 @@ def test_review_dna_check_recommends_eval_for_review_logic_change(
         changed_files=[
             "backend/services/review_dna.py",
             "backend/tests/test_review_dna.py",
-            "docs/REVIEW_DNA_CLI_SPEC.md",
+            "README.md",
         ],
     )
 
@@ -210,7 +207,7 @@ def test_review_dna_check_flags_local_first_risk_without_evidence(
         changed_files=[
             "backend/config.py",
             "backend/tests/test_config.py",
-            "docs/REVIEW_DNA_CLI_SPEC.md",
+            "CHANGELOG.md",
         ],
     )
 
@@ -487,10 +484,9 @@ def test_review_dna_workflow_is_advisory() -> None:
 
 def _make_review_dna_repo(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
-    (path / "README.md").write_text("# Demo Repo\n", encoding="utf-8")
-    (path / "PROJECT_IDEA.md").write_text("# Idea\n", encoding="utf-8")
-    (path / "TECHNICAL_SPEC.md").write_text("# Technical Spec\n", encoding="utf-8")
-    (path / "SPEC_TEMPLATE.md").write_text("# Spec Template\n", encoding="utf-8")
+    (path / "README.md").write_text("# AI Code Review Agent\npytest -q\n", encoding="utf-8")
+    (path / "SECURITY.md").write_text("# Security\n", encoding="utf-8")
+    (path / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
     (path / "AGENTS.md").write_text(
         "# Agent Rules\n"
         'python -m pytest -m "not integration" --tb=short -q\n',

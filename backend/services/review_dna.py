@@ -336,10 +336,10 @@ def build_review_dna_criteria_pack(
                 "idea or feature spec that explains the user value, data/API "
                 "impact, business logic, and edge cases."
             ),
-            rationale="The project methodology requires docs before implementation.",
+            rationale="The project methodology requires visible evidence before implementation.",
             evidence=_filter_evidence(
                 evidence_paths,
-                ("PROJECT_IDEA.md", "SPEC_TEMPLATE.md", "docs/"),
+                ("README.md", "CHANGELOG.md", "SECURITY.md", "review-dna.yml"),
             ),
             verification=(),
         ),
@@ -360,7 +360,7 @@ def build_review_dna_criteria_pack(
                 "PostgreSQL setup outside Docker, or paid LLM providers."
             ),
             rationale="The repository promise is a no-paid-services local demo path.",
-            evidence=_filter_evidence(evidence_paths, ("README.md", "docs/local")),
+            evidence=_filter_evidence(evidence_paths, ("README.md",)),
             verification=_commands_containing(profile, ("docker compose",)),
         ),
         ReviewDNACriterion(
@@ -385,7 +385,7 @@ def build_review_dna_criteria_pack(
             rationale="Review DNA turns repo-specific quality expectations into checks.",
             evidence=_filter_evidence(
                 evidence_paths,
-                ("docs/release-checklist.md", "docs/branch-protection-policy.md"),
+                ("README.md", "SECURITY.md", ".github/workflows/release.yml", ".github/CODEOWNERS"),
             ),
             verification=required_commands,
         ),
@@ -537,35 +537,11 @@ def _detect_evidence_sources(root: Path) -> list[EvidenceSource]:
 
     for relative_path, kind, reason in [
         ("README.md", "product_overview", "Product scope and local run guidance."),
-        ("PROJECT_IDEA.md", "project_idea", "Spec-first product strategy."),
-        ("TECHNICAL_SPEC.md", "technical_spec", "System architecture and contracts."),
-        ("SPEC_TEMPLATE.md", "spec_template", "Required feature spec structure."),
+        ("CHANGELOG.md", "changelog", "Public release and change history."),
+        ("SECURITY.md", "security_policy", "Security reporting and responsible disclosure policy."),
+        ("review-dna.yml", "review_dna_profile", "Repository-specific review and quality profile."),
     ]:
         _add_source_if_exists(sources, root, relative_path, kind, reason)
-
-    docs_dir = root / "docs"
-    if docs_dir.is_dir():
-        for path in sorted(docs_dir.glob("*.md")):
-            name = path.name.lower()
-            relative_path = _relative_path(path, root)
-            if "spec" in name:
-                sources[relative_path] = EvidenceSource(
-                    path=relative_path,
-                    kind="feature_spec",
-                    reason="Feature-level acceptance criteria and edge cases.",
-                )
-            elif "idea" in name:
-                sources[relative_path] = EvidenceSource(
-                    path=relative_path,
-                    kind="feature_idea",
-                    reason="Feature-level product problem, audience, and launch plan.",
-                )
-            elif "checklist" in name or "policy" in name:
-                sources[relative_path] = EvidenceSource(
-                    path=relative_path,
-                    kind="governance",
-                    reason="Release, branch, or operational review policy.",
-                )
 
     evals_dir = root / "evals"
     if evals_dir.is_dir():
@@ -587,6 +563,7 @@ def _detect_quality_gates(root: Path) -> list[QualityGate]:
     if (
         (root / "backend").is_dir()
         and (root / "pytest.ini").is_file()
+        or _file_contains(root / "README.md", backend_test_command)
         or _file_contains(root / "AGENTS.md", backend_test_command)
     ):
         gates.append(
@@ -846,12 +823,7 @@ def _is_test_evidence_path(path: str) -> bool:
 
 
 def _is_spec_or_idea_path(path: str) -> bool:
-    name = Path(path).name.lower()
-    return (
-        path in {"PROJECT_IDEA.md", "TECHNICAL_SPEC.md", "SPEC_TEMPLATE.md"}
-        or path.startswith("docs/")
-        and ("spec" in name or "idea" in name)
-    )
+    return path in {"README.md", "CHANGELOG.md", "SECURITY.md", "review-dna.yml"}
 
 
 def _is_local_first_risk_path(path: str) -> bool:
@@ -880,7 +852,7 @@ def _is_local_first_evidence_path(path: str) -> bool:
     lower_path = path.lower()
     return (
         path == "README.md"
-        or lower_path == "docs/local-demo.md"
+        or lower_path == "readme.md"
         or "local_demo" in lower_path
         or "local-demo" in lower_path
         or "first_run" in lower_path
@@ -889,7 +861,7 @@ def _is_local_first_evidence_path(path: str) -> bool:
 
 
 def _is_review_logic_path(path: str) -> bool:
-    if path.startswith("docs/"):
+    if path in {"README.md", "CHANGELOG.md", "SECURITY.md", "review-dna.yml"}:
         return False
 
     lower_path = path.lower()

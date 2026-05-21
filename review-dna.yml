@@ -1,9 +1,9 @@
 {
   "evidence_sources": [
     {
-      "kind": "project_idea",
-      "path": "PROJECT_IDEA.md",
-      "reason": "Spec-first product strategy."
+      "kind": "changelog",
+      "path": "CHANGELOG.md",
+      "reason": "Public release and change history."
     },
     {
       "kind": "product_overview",
@@ -11,84 +11,19 @@
       "reason": "Product scope and local run guidance."
     },
     {
-      "kind": "spec_template",
-      "path": "SPEC_TEMPLATE.md",
-      "reason": "Required feature spec structure."
-    },
-    {
-      "kind": "technical_spec",
-      "path": "TECHNICAL_SPEC.md",
-      "reason": "System architecture and contracts."
-    },
-    {
-      "kind": "feature_spec",
-      "path": "docs/FIRST_RUN_ONBOARDING_SPEC.md",
-      "reason": "Feature-level acceptance criteria and edge cases."
-    },
-    {
-      "kind": "feature_spec",
-      "path": "docs/LOCAL_REVIEW_PLAYGROUND_SPEC.md",
-      "reason": "Feature-level acceptance criteria and edge cases."
-    },
-    {
-      "kind": "feature_spec",
-      "path": "docs/PRODUCT_POLISH_SPEC.md",
-      "reason": "Feature-level acceptance criteria and edge cases."
-    },
-    {
-      "kind": "feature_spec",
-      "path": "docs/REVIEW_DNA_CLI_SPEC.md",
-      "reason": "Feature-level acceptance criteria and edge cases."
-    },
-    {
-      "kind": "feature_idea",
-      "path": "docs/REVIEW_DNA_IDEA.md",
-      "reason": "Feature-level product problem, audience, and launch plan."
-    },
-    {
-      "kind": "feature_spec",
-      "path": "docs/REVIEW_EVAL_HARNESS_SPEC.md",
-      "reason": "Feature-level acceptance criteria and edge cases."
-    },
-    {
-      "kind": "feature_spec",
-      "path": "docs/REVIEW_PASSPORT_EXPORT_SPEC.md",
-      "reason": "Feature-level acceptance criteria and edge cases."
-    },
-    {
-      "kind": "feature_spec",
-      "path": "docs/REVIEW_PASSPORT_GATE_SPEC.md",
-      "reason": "Feature-level acceptance criteria and edge cases."
-    },
-    {
-      "kind": "feature_spec",
-      "path": "docs/REVIEW_PASSPORT_SPEC.md",
-      "reason": "Feature-level acceptance criteria and edge cases."
-    },
-    {
-      "kind": "governance",
-      "path": "docs/branch-protection-policy.md",
-      "reason": "Release, branch, or operational review policy."
-    },
-    {
-      "kind": "governance",
-      "path": "docs/governance-checklist.md",
-      "reason": "Release, branch, or operational review policy."
-    },
-    {
-      "kind": "governance",
-      "path": "docs/release-checklist.md",
-      "reason": "Release, branch, or operational review policy."
-    },
-    {
-      "kind": "governance",
-      "path": "docs/secrets-and-env-policy.md",
-      "reason": "Release, branch, or operational review policy."
+      "kind": "security_policy",
+      "path": "SECURITY.md",
+      "reason": "Security reporting and responsible disclosure policy."
     },
     {
       "kind": "review_eval",
       "path": "evals/review_quality_cases.json",
       "reason": "Deterministic review quality regression evidence."
+    },
+    {
+      "kind": "review_dna_profile",
+      "path": "review-dna.yml",
+      "reason": "Repository-specific review and quality profile."
     }
   ],
   "generated_by": "review-dna-cli",
