@@ -52,16 +52,25 @@ Thumbs.db
 *.key
 *.p12
 
-# Dev docs (keep locally, not in repo)
+# Local/private development docs
 *.md
 !README.md
-!CLAUDE.md
-!AGENTS.md
 !CHANGELOG.md
 !SECURITY.md
-!SPEC_TEMPLATE.md
 !.github/*.md
-!docs/
-!docs/*.md
-!docs/**/*.md
+docs/
 .claude/
+AGENTS.md
+CLAUDE.md
+SPEC_TEMPLATE.md
+PROJECT_IDEA.md
+TECHNICAL_SPEC.md
+DEVELOPMENT_PLAN.md
+SPEC_FIRST_EVALUATION.md
+INDEX.md
+READY_TO_RUN.md
+PR_BODY_PROD_HARDENING.md
+00_READ_FIRST.txt
+DOWNLOAD_THIS.txt
+MANIFEST.txt
+spec_first_methodology_*.pdf
