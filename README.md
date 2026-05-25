@@ -153,6 +153,18 @@ npm test -- --run
 npm run build
 ```
 
+Browser smoke test:
+
+```bash
+docker compose up -d --build
+cd frontend
+npm run test:e2e:install
+npm run test:e2e:local
+```
+
+The smoke test opens Chromium and checks the local user flow end to end:
+register, sign in, create a demo review, and generate a Review Passport.
+
 ## Troubleshooting
 
 If login asks for email verification, make sure the backend has:
