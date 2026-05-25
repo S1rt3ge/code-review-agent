@@ -63,7 +63,10 @@ def decode_jwt(token: str, key: str, *, algorithms: list[str]) -> dict[str, Any]
 
     signing_input = f"{header_segment}.{payload_segment}".encode("ascii")
     expected_signature = _sign(signing_input, key, algorithm)
-    actual_signature = _base64url_decode(signature_segment)
+    try:
+        actual_signature = _base64url_decode(signature_segment)
+    except JWTDecodeError as exc:
+        raise JWTDecodeError("JWT signature is invalid") from exc
     if not hmac.compare_digest(expected_signature, actual_signature):
         raise JWTDecodeError("JWT signature is invalid")
 
@@ -109,9 +112,13 @@ def _base64url_encode(data: bytes) -> bytes:
 def _base64url_decode(data: str) -> bytes:
     padding_size = (-len(data)) % 4
     try:
-        return base64.urlsafe_b64decode((data + "=" * padding_size).encode("ascii"))
-    except (ValueError, binascii.Error) as exc:
+        encoded = data.encode("ascii")
+        decoded = base64.urlsafe_b64decode(encoded + b"=" * padding_size)
+    except (UnicodeEncodeError, ValueError, binascii.Error) as exc:
         raise JWTDecodeError("JWT segment is not valid base64url") from exc
+    if _base64url_encode(decoded) != encoded:
+        raise JWTDecodeError("JWT segment is not canonical base64url")
+    return decoded
 
 
 def _decode_json_segment(segment: str) -> dict[str, Any]:
