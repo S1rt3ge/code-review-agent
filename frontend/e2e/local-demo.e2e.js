@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-const apiBaseURL = process.env.E2E_API_URL || 'http://localhost:8000'
+const apiBaseURL = process.env.E2E_API_URL || 'http://127.0.0.1:8000'
 
 async function expectNoLocalAuthBlock(page) {
   const body = page.locator('body')
