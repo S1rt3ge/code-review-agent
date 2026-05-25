@@ -6,6 +6,10 @@ The format is inspired by Keep a Changelog and follows semantic-style sections.
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [0.2.0] - 2026-05-25
+
 ### Added
 - Productized self-hosted demo release scope:
   - Local Review Playground demo reviews and pasted-diff reviews without GitHub,
@@ -27,6 +31,12 @@ The format is inspired by Keep a Changelog and follows semantic-style sections.
   - `docs/webhook-tunnel.md`
   - `docs/ollama-setup.md`
   - `docs/v0.2-roadmap.md`
+- Browser smoke coverage for the local demo path:
+  - Playwright Chromium check for register, sign in, demo review creation, and
+    Review Passport generation.
+  - Local `npm run test:e2e:local` command documented in README.
+- Python dependency refresh for the release baseline, including FastAPI,
+  Sentry SDK, SQLAlchemy, Anthropic, Ruff, and Starlette.
 
 ### Changed
 - Local Docker/demo setup can disable email verification with
@@ -34,6 +44,14 @@ The format is inspired by Keep a Changelog and follows semantic-style sections.
   without a paid SMTP provider.
 - Settings and repository setup copy now emphasize BYOK/local Ollama and free
   webhook tunnel options for self-hosted evaluation.
+- JWT decoding now rejects non-canonical base64url signature encodings.
+
+### Verified
+- Docker stack build and health checks for backend, frontend, and Postgres.
+- Backend unit/API, integration, coverage, lint, dependency audit, and review
+  quality evals.
+- Frontend unit tests, production build, npm audit, and Playwright local demo
+  smoke test.
 
 ## [2026-04-16]
 
