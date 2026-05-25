@@ -8,7 +8,29 @@ The format is inspired by Keep a Changelog and follows semantic-style sections.
 
 No unreleased changes yet.
 
-## [0.2.0] - 2026-05-25
+## [0.2.1] - 2026-05-25
+
+### Added
+- Browser smoke coverage for the local demo path:
+  - Playwright Chromium check for register, sign in, demo review creation, and
+    Review Passport generation.
+  - Local `npm run test:e2e:local` command documented in README.
+
+### Changed
+- Python dependency refresh for the release baseline, including FastAPI,
+  Sentry SDK, SQLAlchemy, Anthropic, Ruff, and Starlette.
+- JWT decoding now rejects non-canonical base64url signature encodings.
+- Playwright E2E defaults now use explicit IPv4 loopback addresses for Windows
+  Docker Desktop compatibility.
+
+### Verified
+- Docker stack build and health checks for backend, frontend, and Postgres.
+- Backend unit/API, integration, coverage, lint, dependency audit, and review
+  quality evals.
+- Frontend unit tests, production build, npm audit, and Playwright local demo
+  smoke test.
+
+## [0.2.0] - 2026-05-16
 
 ### Added
 - Productized self-hosted demo release scope:
@@ -31,12 +53,6 @@ No unreleased changes yet.
   - `docs/webhook-tunnel.md`
   - `docs/ollama-setup.md`
   - `docs/v0.2-roadmap.md`
-- Browser smoke coverage for the local demo path:
-  - Playwright Chromium check for register, sign in, demo review creation, and
-    Review Passport generation.
-  - Local `npm run test:e2e:local` command documented in README.
-- Python dependency refresh for the release baseline, including FastAPI,
-  Sentry SDK, SQLAlchemy, Anthropic, Ruff, and Starlette.
 
 ### Changed
 - Local Docker/demo setup can disable email verification with
@@ -44,14 +60,6 @@ No unreleased changes yet.
   without a paid SMTP provider.
 - Settings and repository setup copy now emphasize BYOK/local Ollama and free
   webhook tunnel options for self-hosted evaluation.
-- JWT decoding now rejects non-canonical base64url signature encodings.
-
-### Verified
-- Docker stack build and health checks for backend, frontend, and Postgres.
-- Backend unit/API, integration, coverage, lint, dependency audit, and review
-  quality evals.
-- Frontend unit tests, production build, npm audit, and Playwright local demo
-  smoke test.
 
 ## [2026-04-16]
 
