@@ -12,9 +12,9 @@ annotated-types==0.7.0 \
     --hash=sha256:1f02e8b43a8fbbc3f3e0d4f0f4bfc8131bcb4eebe8849b8e5c773f3a1c582a53 \
     --hash=sha256:aff07c09a53a08bc8cfccb9c85b05f1aa9a2a6f23728d790723543408344ce89
     # via pydantic
-anthropic==0.96.0 \
-    --hash=sha256:9a6e335a354602a521cd9e777e92bfd46ba6e115bf9bbfe6135311e8fb2015b2 \
-    --hash=sha256:9de947b737f39452f68aa520f1c2239d44119c9b73b0fb6d4e6ca80f00279ee6
+anthropic==0.104.1 \
+    --hash=sha256:17362b6c45f527afcc9b0fdf62011ffd359726ab2ebcb1978ea0cc41bd8d8d40 \
+    --hash=sha256:35c8cb456f5a4405aafe1f10f03f6fcc54fa51fa8ec01d655cc4b437d120e9b7
     # via -r requirements.in
 anyio==4.13.0 \
     --hash=sha256:08b310f9e24a9594186fd75b4f73f4a4152069e3853f1ed8bfbf58369f4ad708 \
@@ -180,13 +180,6 @@ click==8.3.2 \
     --hash=sha256:14162b8b3b3550a7d479eafa77dfd3c38d9dc8951f6f69c78913a8f9a7540fd5 \
     --hash=sha256:1924d2c27c5653561cd2cae4548d1406039cb79b858b747cfea24924bbc1616d
     # via uvicorn
-colorama==0.4.6 \
-    --hash=sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44 \
-    --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
-    # via
-    #   click
-    #   pytest
-    #   tqdm
 coverage==7.13.5 \
     --hash=sha256:012d5319e66e9d5a218834642d6c35d265515a62f01157a45bcc036ecf947256 \
     --hash=sha256:02ca0eed225b2ff301c474aeeeae27d26e2537942aa0f87491d3e147e784a82b \
@@ -949,10 +942,6 @@ typing-inspection==0.4.2 \
     #   fastapi
     #   pydantic
     #   pydantic-settings
-tzdata==2026.1 \
-    --hash=sha256:4b1d2be7ac37ceafd7327b961aa3a54e467efbdb563a23655fbfe0d39cfc42a9 \
-    --hash=sha256:67658a1903c75917309e753fdc349ac0efd8c27db7a0cb406a25be4840f87f98
-    # via psycopg
 urllib3==2.7.0 \
     --hash=sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c \
     --hash=sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897
