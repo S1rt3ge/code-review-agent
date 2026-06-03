@@ -18,6 +18,16 @@ Run the Docker stack, create a local account, and start with the bundled demo re
 - Optional GitHub webhook, PR comment, and commit status integration
 - Local demo auth that works without email delivery
 
+## How it works
+
+Four specialized agents — **Security**, **Performance**, **Style**, and **Logic** — review each diff **in parallel**, then their findings are aggregated into a single **Review Passport** with a merge verdict.
+
+- **Parallel agents** — each reviewer owns one concern and runs concurrently for fast, structured findings (LangGraph orchestration).
+- **Multi-LLM routing** — Claude Opus 4.6 as primary, OpenAI GPT as fallback, and local Ollama/Qwen for private repos; stored API keys are encrypted at rest (Fernet).
+- **GitHub App** — HMAC-SHA256-verified webhooks post findings as PR comments and commit statuses; a durable queue handles retries and stale-lock recovery.
+- **Review Passport** — acceptance-criteria coverage, anti-slop signals, QA steps, and a blocking/approve verdict.
+- **Local-first** — the full demo runs offline in Docker, no GitHub or paid providers required.
+
 ## Quick Start
 
 Prerequisites:
@@ -32,6 +42,9 @@ git clone https://github.com/S1rt3ge/code-review-agent.git
 cd code-review-agent
 docker compose up --build
 ```
+
+No `.env` file is required for the local demo. Docker Compose ships with safe
+local defaults, including disabled email verification.
 
 Open:
 
@@ -112,15 +125,23 @@ The demo path works without provider keys. For live AI-backed reviews, configure
 
 Provider settings are managed in the app settings page. Stored API keys are encrypted at rest.
 
+For environment overrides, copy `.env.example` to `.env` and fill only the
+values you need. Keep `.env` private.
+
 ## Run Without Docker
 
 Backend:
 
 ```bash
 pip install -r requirements.txt -r requirements-dev-windows.in
+export DATABASE_URL=postgresql+psycopg://cra_user:cra_password@localhost:5432/cra_db
 python scripts/migrate.py
 python -m backend.run
 ```
+
+The backend expects a reachable PostgreSQL database. The URL above matches the
+default credentials from `docker-compose.yml` if you run only the Postgres
+service with Docker.
 
 Frontend:
 
