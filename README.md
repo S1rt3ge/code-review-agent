@@ -33,6 +33,9 @@ cd code-review-agent
 docker compose up --build
 ```
 
+No `.env` file is required for the local demo. Docker Compose ships with safe
+local defaults, including disabled email verification.
+
 Open:
 
 - App: `http://localhost:5173`
@@ -112,15 +115,23 @@ The demo path works without provider keys. For live AI-backed reviews, configure
 
 Provider settings are managed in the app settings page. Stored API keys are encrypted at rest.
 
+For environment overrides, copy `.env.example` to `.env` and fill only the
+values you need. Keep `.env` private.
+
 ## Run Without Docker
 
 Backend:
 
 ```bash
 pip install -r requirements.txt -r requirements-dev-windows.in
+export DATABASE_URL=postgresql+psycopg://cra_user:cra_password@localhost:5432/cra_db
 python scripts/migrate.py
 python -m backend.run
 ```
+
+The backend expects a reachable PostgreSQL database. The URL above matches the
+default credentials from `docker-compose.yml` if you run only the Postgres
+service with Docker.
 
 Frontend:
 

@@ -6,7 +6,10 @@ The format is inspired by Keep a Changelog and follows semantic-style sections.
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Changed
+- Docker Compose no longer requires a local `.env` file for the first run.
+- Public onboarding docs now keep setup instructions in README and avoid
+  pointing users at internal development specs.
 
 ## [0.2.1] - 2026-05-25
 
@@ -44,15 +47,8 @@ No unreleased changes yet.
     anti-AI-slop signals, manual QA steps, Markdown export, PR comment posting,
     and optional GitHub commit-status gate publishing.
   - Deterministic review quality eval harness for local regression checks.
-- Release process baseline docs and workflow:
-  - `docs/release-checklist.md`
-  - `.github/workflows/release.yml`
-- Productized self-hosted demo documentation:
-  - README quick path for running the local demo in 5 minutes.
-  - `docs/local-demo.md`
-  - `docs/webhook-tunnel.md`
-  - `docs/ollama-setup.md`
-  - `docs/v0.2-roadmap.md`
+- Release workflow baseline in `.github/workflows/release.yml`.
+- README quick path for running the local demo in 5 minutes.
 
 ### Changed
 - Local Docker/demo setup can disable email verification with
