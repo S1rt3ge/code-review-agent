@@ -1,15 +1,55 @@
 .git
+.github
+
+# Local environment and secrets
 .env
 .env.*
 !.env.example
-__pycache__
-**/__pycache__
-*.pyc
-*.pyo
-.pytest_cache
-**/.pytest_cache
-frontend/node_modules
-frontend/dist
-.github
-*.md
-!README.md
+*.pem
+*.key
+*.p12
+
+# Python caches and test output
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.coverage
+htmlcov/
+.pytest_cache/
+**/.pytest_cache/
+.ruff_cache/
+
+# Frontend dependencies and generated output
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
+
+# Local/private development docs
+docs/
+.claude/
+AGENTS.md
+CLAUDE.md
+SPEC_TEMPLATE.md
+PROJECT_IDEA.md
+TECHNICAL_SPEC.md
+DEVELOPMENT_PLAN.md
+SPEC_FIRST_EVALUATION.md
+INDEX.md
+READY_TO_RUN.md
+PR_BODY_PROD_HARDENING.md
+00_READ_FIRST.txt
+DOWNLOAD_THIS.txt
+MANIFEST.txt
+spec_first_methodology_*.pdf
+
+# Local editor, database, and log files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.log
+*.sqlite3
+*.db

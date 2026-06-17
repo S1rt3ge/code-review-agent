@@ -22,7 +22,7 @@ from backend.services.code_extractor import CodeChunk
 
 logger = logging.getLogger(__name__)
 
-# Per-agent timeout in seconds (matches CLAUDE.md specification).
+# Per-agent timeout in seconds for each analysis worker.
 AGENT_TIMEOUT = 30
 
 # Maximum characters of code fed to each agent per call.
