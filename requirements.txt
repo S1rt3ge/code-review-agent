@@ -180,13 +180,6 @@ click==8.3.2 \
     --hash=sha256:14162b8b3b3550a7d479eafa77dfd3c38d9dc8951f6f69c78913a8f9a7540fd5 \
     --hash=sha256:1924d2c27c5653561cd2cae4548d1406039cb79b858b747cfea24924bbc1616d
     # via uvicorn
-colorama==0.4.6 \
-    --hash=sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44 \
-    --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
-    # via
-    #   click
-    #   pytest
-    #   tqdm
 coverage==7.13.5 \
     --hash=sha256:012d5319e66e9d5a218834642d6c35d265515a62f01157a45bcc036ecf947256 \
     --hash=sha256:02ca0eed225b2ff301c474aeeeae27d26e2537942aa0f87491d3e147e784a82b \
@@ -572,9 +565,9 @@ limits==5.8.0 \
     --hash=sha256:ae1b008a43eb43073c3c579398bd4eb4c795de60952532dc24720ab45e1ac6b8 \
     --hash=sha256:c9e0d74aed837e8f6f50d1fcebcf5fd8130957287206bc3799adaee5092655da
     # via slowapi
-openai==2.37.0 \
-    --hash=sha256:814633888b8f3b1ffd6615697c6e4ef93632d08b7c2e28c8c5ef3556e5a10107 \
-    --hash=sha256:f4bc562cc5f3a43d40d678105572d9d44765f6e0f50c125f63055419b72f4bd9
+openai==2.39.0 \
+    --hash=sha256:8d915a72448314c97c719fa63e3c88efa6041e806c546064aaf1edc5e6fffc45 \
+    --hash=sha256:be9de9b3a1f264777c27d3efb266b5abd37f3d25b48f8d0ac1c4db14e5c73bfd
     # via -r requirements.in
 packaging==26.1 \
     --hash=sha256:5d9c0669c6285e491e0ced2eee587eaf67b670d94a19e94e3984a481aba6802f \
@@ -926,16 +919,12 @@ typing-extensions==4.15.0 \
     --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548
     # via
     #   anthropic
-    #   anyio
     #   fastapi
     #   limits
     #   openai
-    #   psycopg
     #   pydantic
     #   pydantic-core
-    #   pytest-asyncio
     #   sqlalchemy
-    #   starlette
     #   typing-inspection
 typing-inspection==0.4.2 \
     --hash=sha256:4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7 \
@@ -944,10 +933,6 @@ typing-inspection==0.4.2 \
     #   fastapi
     #   pydantic
     #   pydantic-settings
-tzdata==2026.1 \
-    --hash=sha256:4b1d2be7ac37ceafd7327b961aa3a54e467efbdb563a23655fbfe0d39cfc42a9 \
-    --hash=sha256:67658a1903c75917309e753fdc349ac0efd8c27db7a0cb406a25be4840f87f98
-    # via psycopg
 urllib3==2.7.0 \
     --hash=sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c \
     --hash=sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897
